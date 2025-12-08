@@ -1,0 +1,5 @@
+{
+  "name": "Lumina - AI Learning Assistant",
+  "description": "An intelligent study companion that transforms your PDFs into interactive chats, summaries, flashcards, and quizzes using Google Gemini.",
+  "requestFramePermissions": []
+}
