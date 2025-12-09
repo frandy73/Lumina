@@ -1,3 +1,4 @@
+
 import { GoogleGenAI, Type } from "@google/genai";
 import { Document, Flashcard, QuizQuestion, MindMapNode, Citation } from '../types';
 
@@ -226,6 +227,31 @@ export const chatWithDocument = async (doc: Document, history: { role: string, p
   }
 };
 
+export const rewriteText = async (text: string, mode: 'bullet' | 'paragraph' | 'shorter' | 'longer'): Promise<string> => {
+  let prompt = "";
+  switch(mode) {
+    case 'bullet': prompt = "Convert the following text into a clear bulleted list. Keep the formatting clean."; break;
+    case 'paragraph': prompt = "Convert the following text into a cohesive, well-structured single paragraph."; break;
+    case 'shorter': prompt = "Rewrite the following text to be more concise and shorter, while keeping the main meaning."; break;
+    case 'longer': prompt = "Expand on the following text to be more detailed and comprehensive, adding necessary context or explanation."; break;
+  }
+
+  try {
+    const response = await getAi().models.generateContent({
+      model: 'gemini-2.5-flash',
+      contents: {
+        parts: [
+          { text: `${prompt}\n\nTEXT:\n"${text}"` }
+        ]
+      }
+    });
+    return response.text || text;
+  } catch (error) {
+    console.error("Rewrite Error:", error);
+    return text;
+  }
+};
+
 export const generateFlashcards = async (doc: Document, count: number = 10): Promise<Flashcard[]> => {
   try {
     const response = await getAi().models.generateContent({
@@ -309,6 +335,59 @@ export const generateQuiz = async (doc: Document, count: number, topic?: string)
     }));
   } catch (error) {
     console.error("Quiz Gen Error:", error);
+    throw error;
+  }
+};
+
+export const generateQuizFromChat = async (doc: Document, chatHistory: {role: string, text: string}[]): Promise<QuizQuestion[]> => {
+  try {
+    const historyText = chatHistory.map(m => `${m.role}: ${m.text}`).join('\n\n');
+    
+    const response = await getAi().models.generateContent({
+      model: 'gemini-2.5-flash',
+      contents: {
+        parts: [
+          getFilePart(doc.base64Data, doc.type),
+          { text: `Based on the following chat conversation about the document, generate a short multiple-choice quiz (3-5 questions) to test the user's understanding of the *specific topics discussed in the chat*.
+          
+          CHAT HISTORY:
+          ${historyText}
+          
+          ${LANG_INSTRUCTION}` }
+        ]
+      },
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.ARRAY,
+          items: {
+            type: Type.OBJECT,
+            properties: {
+              question: { type: Type.STRING },
+              options: { 
+                type: Type.ARRAY, 
+                items: { type: Type.STRING },
+                description: "Array of 4 possible answers"
+              },
+              correctAnswerIndex: { type: Type.INTEGER },
+              explanation: { type: Type.STRING }
+            },
+            required: ["question", "options", "correctAnswerIndex", "explanation"]
+          }
+        }
+      }
+    });
+
+    const rawData = JSON.parse(response.text || "[]");
+    return rawData.map((item: any, index: number) => ({
+      id: index,
+      question: item.question,
+      options: item.options,
+      correctAnswerIndex: item.correctAnswerIndex,
+      explanation: item.explanation
+    }));
+  } catch (error) {
+    console.error("Chat Quiz Gen Error:", error);
     throw error;
   }
 };

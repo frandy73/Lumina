@@ -1,7 +1,8 @@
+
 import React, { useState, useRef, useEffect } from 'react';
 import { Document, ChatMessage, Flashcard, QuizQuestion, MindMapNode, Citation, ExplainedConcept } from '../types';
-import { chatWithDocument, generateTailoredSummary, generateFlashcards, generateQuiz, explainConcept, generateMindMap, generateStrategicAnalysis, generateKeyCitations, generateStudyGuide, generateFAQ } from '../services/geminiService';
-import { Send, BookOpen, Brain, List, FileText, CheckCircle, RefreshCw, Star, ArrowRight, ArrowLeft, Loader2, Play, Lightbulb, Search, X, ZoomIn, ZoomOut, RotateCw, ChevronLeft, ChevronRight, Speaker, Shuffle, Settings, Target, Share2, Layers, Book, HelpCircle, GraduationCap, Quote, Volume2, StopCircle, Download, Timer, Pause, Bell, Trash2, Bookmark } from 'lucide-react';
+import { chatWithDocument, generateTailoredSummary, generateFlashcards, generateQuiz, explainConcept, generateMindMap, generateStrategicAnalysis, generateKeyCitations, generateStudyGuide, generateFAQ, rewriteText, generateQuizFromChat } from '../services/geminiService';
+import { Send, BookOpen, Brain, List, FileText, CheckCircle, RefreshCw, Star, ArrowRight, ArrowLeft, Loader2, Play, Lightbulb, Search, X, ZoomIn, ZoomOut, RotateCw, ChevronLeft, ChevronRight, Speaker, Shuffle, Settings, Target, Share2, Layers, Book, HelpCircle, GraduationCap, Quote, Volume2, StopCircle, Download, Timer, Pause, Bell, Trash2, Bookmark, Copy, Check, ThumbsUp, ThumbsDown, Wand2, AlignLeft, Minimize2, Maximize2, Mic, MicOff, FileQuestion, NotebookPen, Pin, Save, Cloud } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Document as PdfDocument, Page as PdfPage, pdfjs } from 'react-pdf';
@@ -28,6 +29,19 @@ const Workspace: React.FC<WorkspaceProps> = ({ document: doc, onBack, onDelete, 
   const [inputMessage, setInputMessage] = useState('');
   const [isChatLoading, setIsChatLoading] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [rewritingMessageId, setRewritingMessageId] = useState<string | null>(null);
+  const [openRewriteMenuId, setOpenRewriteMenuId] = useState<string | null>(null);
+  const [pinnedId, setPinnedId] = useState<string | null>(null);
+  
+  // Voice Input State
+  const [isListening, setIsListening] = useState(false);
+  const recognitionRef = useRef<any>(null);
+
+  // Notes State
+  const [showNotes, setShowNotes] = useState(false);
+  const [userNotes, setUserNotes] = useState<string>(doc.userNotes || '');
+  const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'unsaved'>('saved');
 
   // Summary State
   const [summary, setSummary] = useState<string | null>(doc.summary || null);
@@ -74,6 +88,8 @@ const Workspace: React.FC<WorkspaceProps> = ({ document: doc, onBack, onDelete, 
   const [scale, setScale] = useState<number>(1.0);
   const [rotation, setRotation] = useState<number>(0);
   const [isReading, setIsReading] = useState(false);
+  const [pageInput, setPageInput] = useState<string>('1');
+  const [isPdfFullScreen, setIsPdfFullScreen] = useState(false);
   const pdfDocumentRef = useRef<any>(null);
   const pdfContainerRef = useRef<HTMLDivElement>(null);
   
@@ -143,7 +159,54 @@ const Workspace: React.FC<WorkspaceProps> = ({ document: doc, onBack, onDelete, 
     if (chatEndRef.current) {
       chatEndRef.current.scrollIntoView({ behavior: 'smooth' });
     }
-  }, [messages]);
+  }, [messages, rewritingMessageId, showNotes]);
+
+  // Handle Voice Input Setup
+  useEffect(() => {
+    if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
+        const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+        recognitionRef.current = new SpeechRecognition();
+        recognitionRef.current.continuous = false;
+        recognitionRef.current.interimResults = false;
+        // Detect language based on summaryLang preference, default to French
+        recognitionRef.current.lang = summaryLang === 'en' ? 'en-US' : (summaryLang === 'ht' ? 'ht-HT' : 'fr-FR');
+
+        recognitionRef.current.onresult = (event: any) => {
+            const transcript = event.results[0][0].transcript;
+            setInputMessage(prev => prev ? `${prev} ${transcript}` : transcript);
+            setIsListening(false);
+        };
+
+        recognitionRef.current.onerror = (event: any) => {
+            console.error("Speech recognition error", event.error);
+            setIsListening(false);
+        };
+        
+        recognitionRef.current.onend = () => {
+            setIsListening(false);
+        };
+    }
+  }, [summaryLang]);
+
+  const toggleListening = () => {
+    if (!recognitionRef.current) {
+        alert("La reconnaissance vocale n'est pas supportée par votre navigateur.");
+        return;
+    }
+
+    if (isListening) {
+        recognitionRef.current.stop();
+        setIsListening(false);
+    } else {
+        try {
+            recognitionRef.current.start();
+            setIsListening(true);
+        } catch (e) {
+            console.error(e);
+            setIsListening(false);
+        }
+    }
+  };
 
   // Context Menu Logic
   useEffect(() => {
@@ -173,6 +236,7 @@ const Workspace: React.FC<WorkspaceProps> = ({ document: doc, onBack, onDelete, 
 
     const handleClick = () => {
       if (contextMenu.show) setContextMenu(prev => ({ ...prev, show: false }));
+      if (openRewriteMenuId) setOpenRewriteMenuId(null);
     };
 
     document.addEventListener('contextmenu', handleContextMenu);
@@ -182,9 +246,74 @@ const Workspace: React.FC<WorkspaceProps> = ({ document: doc, onBack, onDelete, 
       document.removeEventListener('contextmenu', handleContextMenu);
       document.removeEventListener('click', handleClick);
     };
-  }, [contextMenu.show]);
+  }, [contextMenu.show, openRewriteMenuId]);
+
+  // Sync pageInput with pageNumber
+  useEffect(() => {
+    setPageInput(pageNumber.toString());
+  }, [pageNumber]);
+
+  // Keyboard Shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Do not trigger if typing in an input or textarea
+      const target = e.target as HTMLElement;
+      if (['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName) || target.isContentEditable) {
+        return;
+      }
+
+      switch (e.key) {
+        case 'ArrowLeft':
+          setPageNumber(prev => Math.max(1, prev - 1));
+          break;
+        case 'ArrowRight':
+          setPageNumber(prev => (numPages ? Math.min(numPages, prev + 1) : prev));
+          break;
+        case '+':
+        case '=': // + without shift often sends =
+          setScale(s => Math.min(2.5, s + 0.1));
+          break;
+        case '-':
+          setScale(s => Math.max(0.5, s - 0.1));
+          break;
+        default:
+          break;
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [numPages]); // numPages dependency needed for ArrowRight check
+
+  // Auto-save Notes Effect
+  useEffect(() => {
+    // If local notes match prop, we are saved
+    if (userNotes === doc.userNotes) {
+      if (saveStatus !== 'saved') setSaveStatus('saved');
+      return;
+    }
+
+    setSaveStatus('saving');
+    
+    const timeoutId = setTimeout(() => {
+      onUpdateDocument({ ...doc, userNotes });
+      setSaveStatus('saved');
+    }, 2000); // Save after 2 seconds of inactivity
+
+    return () => clearTimeout(timeoutId);
+  }, [userNotes, doc, onUpdateDocument]);
 
   // --- Handlers ---
+
+  const handlePageInputSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const page = parseInt(pageInput);
+    if (!isNaN(page) && page >= 1 && page <= numPages) {
+      setPageNumber(page);
+    } else {
+      setPageInput(pageNumber.toString()); // Revert if invalid
+    }
+  };
 
   const downloadContent = (content: string, filename: string, mimeType: string) => {
     const blob = new Blob([content], { type: mimeType });
@@ -216,7 +345,7 @@ const Workspace: React.FC<WorkspaceProps> = ({ document: doc, onBack, onDelete, 
     } else {
       return;
     }
-    downloadContent(content, `${doc.name}_${activeResourceTab}.md`, 'text/markdown');
+    downloadContent(content, `${doc.name}_flashcards.csv`, 'text/markdown');
   };
 
   const handleSendMessage = async (text?: string) => {
@@ -278,6 +407,88 @@ const Workspace: React.FC<WorkspaceProps> = ({ document: doc, onBack, onDelete, 
       setMessages([...updatedMessages, errorMessage]);
     } finally {
       setIsChatLoading(false);
+    }
+  };
+
+  const handleGenerateQuizFromChat = async () => {
+    if (messages.length === 0) {
+        alert("Veuillez d'abord discuter avec le document pour générer des questions basées sur le chat.");
+        return;
+    }
+    setIsChatLoading(true);
+    try {
+        const questions = await generateQuizFromChat(doc, messages);
+        setQuizQuestions(questions);
+        setShowQuizSetup(false); 
+        setQuizFinished(false);
+        setCurrentQuestionIndex(0);
+        setQuizScore(0);
+        setActiveTab('quiz');
+    } catch (e) {
+        console.error(e);
+        alert("Impossible de générer le quiz à partir du chat. Veuillez réessayer.");
+    } finally {
+        setIsChatLoading(false);
+    }
+  };
+
+  const handleCopyMessage = (text: string, id: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedId(id);
+    setTimeout(() => setCopiedId(null), 2000);
+  };
+
+  const handlePinToNotes = (text: string, id: string) => {
+    const newNotes = userNotes ? `${userNotes}\n\n• ${text}` : `• ${text}`;
+    setUserNotes(newNotes);
+    // Directly update doc to ensure sync, effect will handle status but duplicate update is safe
+    onUpdateDocument({ ...doc, userNotes: newNotes });
+    setPinnedId(id);
+    setTimeout(() => setPinnedId(null), 2000);
+    if (!showNotes) setShowNotes(true);
+  };
+
+  const handleNotesChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const newVal = e.target.value;
+    setUserNotes(newVal);
+  };
+  
+  const saveNotes = () => {
+    if (userNotes !== doc.userNotes) {
+      onUpdateDocument({ ...doc, userNotes });
+      setSaveStatus('saved');
+    }
+  };
+
+  const handleLikeMessage = (id: string, isLike: boolean) => {
+    const updatedMessages = messages.map(msg => {
+      if (msg.id === id) {
+        if (isLike) {
+            return { ...msg, isLiked: !msg.isLiked, isDisliked: false };
+        } else {
+            return { ...msg, isDisliked: !msg.isDisliked, isLiked: false };
+        }
+      }
+      return msg;
+    });
+    setMessages(updatedMessages);
+    onUpdateDocument({ ...doc, chatHistory: updatedMessages });
+  };
+
+  const handleRewriteMessage = async (id: string, text: string, mode: 'bullet' | 'paragraph' | 'shorter' | 'longer') => {
+    setOpenRewriteMenuId(null);
+    setRewritingMessageId(id);
+    try {
+      const newText = await rewriteText(text, mode);
+      const updatedMessages = messages.map(msg => 
+        msg.id === id ? { ...msg, text: newText } : msg
+      );
+      setMessages(updatedMessages);
+      onUpdateDocument({ ...doc, chatHistory: updatedMessages });
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setRewritingMessageId(null);
     }
   };
 
@@ -501,13 +712,87 @@ const Workspace: React.FC<WorkspaceProps> = ({ document: doc, onBack, onDelete, 
         )}
         {messages.map((msg) => (
           <div key={msg.id} className="space-y-2">
-            <div className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-              <div className={`max-w-[85%] rounded-2xl p-3 px-4 shadow-sm text-sm ${msg.role === 'user' ? 'bg-indigo-600 text-white' : 'bg-white border border-slate-200 text-slate-800'}`}>
-                <ReactMarkdown>{msg.text}</ReactMarkdown>
+            <div className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
+              <div className={`max-w-[85%] rounded-2xl p-3 px-4 shadow-sm text-sm relative ${msg.role === 'user' ? 'bg-indigo-600 text-white' : 'bg-white border border-slate-200 text-slate-800'}`}>
+                {rewritingMessageId === msg.id ? (
+                    <div className="flex items-center gap-2 text-slate-500">
+                        <Loader2 size={14} className="animate-spin"/>
+                        <span>Réécriture en cours...</span>
+                    </div>
+                ) : (
+                    <ReactMarkdown>{msg.text}</ReactMarkdown>
+                )}
               </div>
+              
+              {msg.role === 'model' && !rewritingMessageId && (
+                <div className="flex items-center gap-1 mt-1 ml-1 text-slate-400">
+                   <button 
+                      onClick={() => handleCopyMessage(msg.text, msg.id)}
+                      className="p-1 hover:bg-slate-100 rounded text-slate-400 hover:text-slate-600 transition-colors"
+                      title="Copier"
+                   >
+                     {copiedId === msg.id ? <Check size={14} className="text-green-500" /> : <Copy size={14} />}
+                   </button>
+                   <button 
+                      onClick={() => handlePinToNotes(msg.text, msg.id)}
+                      className={`p-1 hover:bg-slate-100 rounded transition-colors ${pinnedId === msg.id ? 'text-indigo-600 bg-indigo-50' : 'text-slate-400 hover:text-indigo-600'}`}
+                      title="Épingler dans le bloc-notes"
+                   >
+                     <Pin size={14} fill={pinnedId === msg.id ? "currentColor" : "none"} />
+                   </button>
+                   <button 
+                      onClick={() => handleLikeMessage(msg.id, true)}
+                      className={`p-1 hover:bg-slate-100 rounded transition-colors ${msg.isLiked ? 'text-green-500' : 'hover:text-slate-600'}`}
+                      title="J'aime"
+                   >
+                     <ThumbsUp size={14} fill={msg.isLiked ? "currentColor" : "none"} />
+                   </button>
+                   <button 
+                      onClick={() => handleLikeMessage(msg.id, false)}
+                      className={`p-1 hover:bg-slate-100 rounded transition-colors ${msg.isDisliked ? 'text-red-500' : 'hover:text-slate-600'}`}
+                      title="Je n'aime pas"
+                   >
+                     <ThumbsDown size={14} fill={msg.isDisliked ? "currentColor" : "none"} />
+                   </button>
+                   <button 
+                      onClick={() => speakText(msg.text)}
+                      className="p-1 hover:bg-slate-100 rounded text-slate-400 hover:text-slate-600 transition-colors"
+                      title="Lire à voix haute"
+                   >
+                     <Volume2 size={14} />
+                   </button>
+                   
+                   <div className="relative">
+                       <button 
+                          onClick={(e) => { e.stopPropagation(); setOpenRewriteMenuId(openRewriteMenuId === msg.id ? null : msg.id); }}
+                          className={`p-1 hover:bg-slate-100 rounded text-slate-400 hover:text-indigo-600 transition-colors flex items-center gap-1 ${openRewriteMenuId === msg.id ? 'bg-indigo-50 text-indigo-600' : ''}`}
+                          title="Réécrire"
+                       >
+                         <Wand2 size={14} />
+                       </button>
+
+                       {openRewriteMenuId === msg.id && (
+                           <div className="absolute top-8 left-0 z-10 bg-white border border-slate-200 rounded-lg shadow-lg py-1 w-48 flex flex-col animate-in fade-in zoom-in-95 duration-100">
+                               <button onClick={() => handleRewriteMessage(msg.id, msg.text, 'bullet')} className="text-left px-3 py-2 text-xs hover:bg-slate-50 flex items-center gap-2">
+                                   <List size={14} /> Liste à puces
+                               </button>
+                               <button onClick={() => handleRewriteMessage(msg.id, msg.text, 'paragraph')} className="text-left px-3 py-2 text-xs hover:bg-slate-50 flex items-center gap-2">
+                                   <AlignLeft size={14} /> Paragraphe
+                               </button>
+                               <button onClick={() => handleRewriteMessage(msg.id, msg.text, 'shorter')} className="text-left px-3 py-2 text-xs hover:bg-slate-50 flex items-center gap-2">
+                                   <Minimize2 size={14} /> Plus court
+                               </button>
+                               <button onClick={() => handleRewriteMessage(msg.id, msg.text, 'longer')} className="text-left px-3 py-2 text-xs hover:bg-slate-50 flex items-center gap-2">
+                                   <Maximize2 size={14} /> Plus long
+                               </button>
+                           </div>
+                       )}
+                   </div>
+                </div>
+              )}
             </div>
             {msg.role === 'model' && msg.suggestedQuestions && (
-               <div className="flex gap-2 flex-wrap ml-2">
+               <div className="flex gap-2 flex-wrap ml-2 mt-2">
                   {msg.suggestedQuestions.map((q, i) => (
                     <button key={i} onClick={() => handleSendMessage(q)} className="text-xs bg-indigo-50 text-indigo-700 px-3 py-1 rounded-full hover:bg-indigo-100 transition-colors border border-indigo-200">
                       {q}
@@ -528,22 +813,39 @@ const Workspace: React.FC<WorkspaceProps> = ({ document: doc, onBack, onDelete, 
         <div ref={chatEndRef} />
       </div>
       <div className="p-4 border-t border-slate-200 bg-white">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 bg-slate-50 rounded-full border border-slate-300 focus-within:ring-2 focus-within:ring-indigo-500 focus-within:border-transparent transition-all pr-1">
           <input 
             type="text" 
-            className="flex-1 border border-slate-300 rounded-full px-4 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
-            placeholder="Posez votre question..."
+            className="flex-1 bg-transparent border-none px-4 py-3 focus:outline-none"
+            placeholder={isListening ? "Écoute en cours..." : "Posez votre question..."}
             value={inputMessage}
             onChange={(e) => setInputMessage(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
           />
-          <button 
-            onClick={() => handleSendMessage()}
-            disabled={isChatLoading || !inputMessage.trim()}
-            className="p-2 bg-indigo-600 text-white rounded-full hover:bg-indigo-700 disabled:opacity-50 transition-colors"
-          >
-            <Send size={18} />
-          </button>
+          <div className="flex items-center gap-1">
+             <button
+               onClick={handleGenerateQuizFromChat}
+               disabled={messages.length === 0}
+               className="p-2 text-slate-500 hover:bg-slate-200 hover:text-indigo-600 rounded-full transition-colors disabled:opacity-30 disabled:hover:bg-transparent"
+               title="Générer des questions (Quiz)"
+            >
+               <FileQuestion size={18} />
+            </button>
+            <button
+               onClick={toggleListening}
+               className={`p-2 rounded-full transition-colors ${isListening ? 'bg-red-100 text-red-600 animate-pulse' : 'text-slate-500 hover:bg-slate-200 hover:text-slate-700'}`}
+               title={isListening ? "Arrêter l'écoute" : "Entrée vocale"}
+            >
+               {isListening ? <MicOff size={18} /> : <Mic size={18} />}
+            </button>
+            <button 
+                onClick={() => handleSendMessage()}
+                disabled={isChatLoading || !inputMessage.trim()}
+                className="p-2 bg-indigo-600 text-white rounded-full hover:bg-indigo-700 disabled:opacity-50 transition-colors m-1 shadow-sm"
+            >
+                <Send size={18} />
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -1188,7 +1490,7 @@ const Workspace: React.FC<WorkspaceProps> = ({ document: doc, onBack, onDelete, 
       </div>
 
       {/* PDF Viewer - Left Side (Hidden on mobile when tab is active, or use tabs) */}
-      <div className="hidden md:flex flex-col w-1/2 h-full border-r border-slate-200 bg-slate-100 pt-16 md:pt-0">
+      <div className={`hidden md:flex flex-col ${isPdfFullScreen ? 'w-full' : 'w-1/2'} h-full border-r border-slate-200 bg-slate-100 pt-16 md:pt-0 transition-all duration-300`}>
          <div className="h-14 border-b bg-white flex items-center px-4 justify-between z-20 shadow-sm relative">
             <button onClick={onBack} className="flex items-center text-slate-600 hover:text-slate-900 text-sm font-medium">
               <ArrowLeft size={16} className="mr-2" /> Retour
@@ -1210,9 +1512,31 @@ const Workspace: React.FC<WorkspaceProps> = ({ document: doc, onBack, onDelete, 
                 <button onClick={() => setRotation(r => (r + 90) % 360)} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500"><RotateCw size={18} /></button>
                 <div className="h-4 w-px bg-slate-300 mx-1"></div>
                 <button onClick={previousPage} disabled={pageNumber <= 1} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500 disabled:opacity-30"><ChevronLeft size={18} /></button>
-                <span className="text-sm font-medium text-slate-600 w-16 text-center">{pageNumber} / {numPages || '-'}</span>
+                
+                {/* Page Navigation Input */}
+                <form onSubmit={handlePageInputSubmit} className="flex items-center gap-1">
+                  <input 
+                    type="text" 
+                    value={pageInput}
+                    onChange={(e) => setPageInput(e.target.value)}
+                    onBlur={handlePageInputSubmit}
+                    className="w-10 text-center text-sm font-medium text-slate-600 bg-slate-50 border border-slate-200 rounded focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                  />
+                  <span className="text-sm font-medium text-slate-500">/ {numPages || '-'}</span>
+                </form>
+
                 <button onClick={nextPage} disabled={pageNumber >= numPages} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500 disabled:opacity-30"><ChevronRight size={18} /></button>
+                
                 <div className="h-4 w-px bg-slate-300 mx-1"></div>
+
+                <button 
+                   onClick={() => setIsPdfFullScreen(!isPdfFullScreen)}
+                   className={`p-1.5 rounded-lg hover:bg-slate-100 text-slate-500 ${isPdfFullScreen ? 'text-indigo-600 bg-indigo-50' : ''}`}
+                   title={isPdfFullScreen ? "Réduire" : "Mode Focus (Plein écran)"}
+                >
+                  {isPdfFullScreen ? <Minimize2 size={18} /> : <Maximize2 size={18} />}
+                </button>
+
                 <button onClick={() => setShowDeleteConfirm(true)} className="p-1.5 rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-600" title="Supprimer">
                   <Trash2 size={18} />
                 </button>
@@ -1229,13 +1553,57 @@ const Workspace: React.FC<WorkspaceProps> = ({ document: doc, onBack, onDelete, 
               loading={<div className="flex items-center justify-center h-full"><Loader2 className="animate-spin text-slate-400" size={32} /></div>}
               className="shadow-xl"
            >
-              <PdfPage pageNumber={pageNumber} scale={scale} rotate={rotation} className="bg-white" renderTextLayer={true} renderAnnotationLayer={false}/>
+              {/* Current Page (Visible) */}
+              <div className={isPdfFullScreen ? "flex justify-center" : ""}>
+                 <PdfPage 
+                    key={`page_${pageNumber}`}
+                    pageNumber={pageNumber} 
+                    scale={scale} 
+                    rotate={rotation} 
+                    className="bg-white" 
+                    renderTextLayer={true} 
+                    renderAnnotationLayer={false}
+                    loading={
+                        <div className="flex items-center justify-center h-[800px] w-full bg-white">
+                            <Loader2 className="animate-spin text-slate-400" size={32} />
+                        </div>
+                    }
+                 />
+              </div>
+
+              {/* Pre-load Next Page (Hidden) */}
+              <div style={{ display: 'none' }}>
+                {pageNumber < numPages && (
+                    <PdfPage 
+                        key={`page_${pageNumber + 1}`}
+                        pageNumber={pageNumber + 1} 
+                        scale={scale} 
+                        rotate={rotation}
+                        renderTextLayer={true}
+                        renderAnnotationLayer={false}
+                    />
+                )}
+              </div>
+
+              {/* Cache Previous Page (Hidden) */}
+              <div style={{ display: 'none' }}>
+                {pageNumber > 1 && (
+                    <PdfPage 
+                        key={`page_${pageNumber - 1}`}
+                        pageNumber={pageNumber - 1} 
+                        scale={scale} 
+                        rotate={rotation}
+                        renderTextLayer={true}
+                        renderAnnotationLayer={false}
+                    />
+                )}
+              </div>
            </PdfDocument>
          </div>
       </div>
 
       {/* AI Tools - Right Side */}
-      <div className="w-full md:w-1/2 h-full flex flex-col bg-white pt-14 md:pt-0">
+      <div className={`w-full ${isPdfFullScreen ? 'hidden' : 'md:w-1/2'} h-full flex flex-col bg-white pt-14 md:pt-0`}>
         
         {/* Tool Navigation */}
         <div className="h-14 border-b flex items-center px-2 overflow-x-auto no-scrollbar justify-between">
@@ -1263,35 +1631,90 @@ const Workspace: React.FC<WorkspaceProps> = ({ document: doc, onBack, onDelete, 
              </button>
            </div>
            
-           {/* Focus Mode Toggle */}
-           <button 
-             onClick={() => setShowFocusTimer(!showFocusTimer)}
-             className={`p-2 rounded-lg transition-colors mr-2 ${showFocusTimer ? 'bg-indigo-100 text-indigo-600' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-50'}`}
-             title="Mode Concentration"
-           >
-             <Timer size={20} />
-           </button>
+           <div className="flex items-center gap-1">
+             <button 
+               onClick={() => setShowNotes(!showNotes)}
+               className={`p-2 rounded-lg transition-colors ${showNotes ? 'bg-yellow-100 text-yellow-700' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-50'}`}
+               title="Bloc-notes"
+             >
+               <NotebookPen size={20} />
+             </button>
+             
+             {/* Focus Mode Toggle */}
+             <button 
+               onClick={() => setShowFocusTimer(!showFocusTimer)}
+               className={`p-2 rounded-lg transition-colors mr-2 ${showFocusTimer ? 'bg-indigo-100 text-indigo-600' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-50'}`}
+               title="Mode Concentration"
+             >
+               <Timer size={20} />
+             </button>
+           </div>
         </div>
 
-        {/* Tool Content */}
-        <div className="flex-1 overflow-hidden relative">
-           <AnimatePresence mode='wait'>
-             <motion.div 
-               key={activeTab}
-               initial={{ opacity: 0, x: 20 }}
-               animate={{ opacity: 1, x: 0 }}
-               exit={{ opacity: 0, x: -20 }}
-               transition={{ duration: 0.2 }}
-               className="h-full"
-             >
-                {activeTab === 'chat' && renderChat()}
-                {activeTab === 'summary' && renderSummary()}
-                {activeTab === 'flashcards' && renderFlashcards()}
-                {activeTab === 'quiz' && renderQuiz()}
-                {activeTab === 'deep_dive' && renderDeepDive()}
-                {activeTab === 'concepts' && renderConcepts()}
-                {activeTab === 'resources' && renderResources()}
-             </motion.div>
+        {/* Tool Content & Notes Split View */}
+        <div className="flex-1 flex flex-col overflow-hidden relative">
+           <div className={`flex-1 overflow-hidden relative transition-all duration-300 ${showNotes ? 'basis-[60%]' : 'basis-full'}`}>
+             <AnimatePresence mode='wait'>
+               <motion.div 
+                 key={activeTab}
+                 initial={{ opacity: 0, x: 20 }}
+                 animate={{ opacity: 1, x: 0 }}
+                 exit={{ opacity: 0, x: -20 }}
+                 transition={{ duration: 0.2 }}
+                 className="h-full"
+               >
+                  {activeTab === 'chat' && renderChat()}
+                  {activeTab === 'summary' && renderSummary()}
+                  {activeTab === 'flashcards' && renderFlashcards()}
+                  {activeTab === 'quiz' && renderQuiz()}
+                  {activeTab === 'deep_dive' && renderDeepDive()}
+                  {activeTab === 'concepts' && renderConcepts()}
+                  {activeTab === 'resources' && renderResources()}
+               </motion.div>
+             </AnimatePresence>
+           </div>
+
+           {/* Notes Panel */}
+           <AnimatePresence>
+             {showNotes && (
+               <motion.div 
+                 initial={{ height: 0, opacity: 0 }}
+                 animate={{ height: '40%', opacity: 1 }}
+                 exit={{ height: 0, opacity: 0 }}
+                 transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+                 className="border-t border-slate-200 bg-yellow-50 flex flex-col shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] z-20"
+               >
+                 <div className="p-2 border-b border-yellow-100 flex justify-between items-center px-4 bg-yellow-50/80 backdrop-blur-sm">
+                     <h4 className="font-bold text-yellow-800 flex items-center gap-2 text-sm uppercase tracking-wide">
+                       <NotebookPen size={16}/> Bloc-notes Intelligent
+                     </h4>
+                     <div className="flex items-center gap-3">
+                       <span className={`text-xs font-medium flex items-center gap-1 transition-colors ${saveStatus === 'saving' ? 'text-yellow-600' : 'text-green-600'}`}>
+                          {saveStatus === 'saving' ? (
+                            <><RefreshCw size={12} className="animate-spin" /> Enregistrement...</>
+                          ) : (
+                            <><Cloud size={12} /> Enregistré</>
+                          )}
+                       </span>
+                       <div className="h-4 w-px bg-yellow-200"></div>
+                       <button onClick={saveNotes} className="p-1 text-yellow-600 hover:bg-yellow-100 rounded" title="Sauvegarder maintenant">
+                         <Save size={16}/>
+                       </button>
+                       <button onClick={() => setShowNotes(false)} className="p-1 text-yellow-600 hover:bg-yellow-100 rounded">
+                         <X size={16}/>
+                       </button>
+                     </div>
+                 </div>
+                 <textarea 
+                     className="flex-1 w-full bg-transparent p-4 resize-none focus:outline-none text-slate-700 font-medium leading-relaxed text-sm"
+                     placeholder="Écrivez vos notes ici ou épinglez des messages du chat..."
+                     value={userNotes}
+                     onChange={handleNotesChange}
+                     onBlur={saveNotes}
+                     spellCheck={false}
+                 />
+               </motion.div>
+             )}
            </AnimatePresence>
         </div>
       </div>

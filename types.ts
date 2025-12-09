@@ -1,3 +1,4 @@
+
 export interface User {
   id: string;
   name: string;
@@ -36,6 +37,7 @@ export interface Document {
   summaryLang?: 'en' | 'fr' | 'ht';
   
   chatHistory?: ChatMessage[];
+  userNotes?: string; // Smart Notes content
   
   // New cached resources
   mindMap?: MindMapNode;
@@ -54,6 +56,8 @@ export interface ChatMessage {
   text: string;
   timestamp: number;
   suggestedQuestions?: string[];
+  isLiked?: boolean;
+  isDisliked?: boolean;
 }
 
 export interface Flashcard {
