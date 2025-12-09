@@ -21,7 +21,8 @@ export interface Document {
   size: number;
   type: string;
   uploadDate: string;
-  base64Data: string; 
+  file_path?: string; // Reference to storage path
+  base64Data?: string; // Optional: Only loaded when opening the workspace
   // Summary logic
   summary?: string;
   summaryType?: 'simple' | 'analytical' | 'pedagogical' | 'concrete';

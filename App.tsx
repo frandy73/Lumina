@@ -1,13 +1,19 @@
 import React, { useState, useEffect } from 'react';
 import { User, Document, AppView, AnalyticsData } from './types';
 import Workspace from './components/Workspace';
-import { getAllDocuments, saveDocument, deleteDocument, clearAllData } from './services/storageService';
-import { LayoutDashboard, FolderOpen, LogOut, UploadCloud, Plus, File as FileIcon, Trash2, BarChart2, Zap, Search, Loader2, Database } from 'lucide-react';
+import { getAllDocuments, saveDocument, deleteDocument, clearAllData, loadDocumentFile } from './services/storageService';
+import { supabase } from './services/supabaseClient';
+import { LayoutDashboard, FolderOpen, LogOut, UploadCloud, Plus, File as FileIcon, Trash2, BarChart2, Zap, Search, Loader2, Database, UserPlus, LogIn, AlertCircle } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import { motion } from 'framer-motion';
 
-// Mock Data
-const MOCK_USER: User = { id: 'u1', name: 'Student Demo', email: 'student@example.com' };
+// Polyfill/Fallback for UUID
+const generateId = () => {
+    if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+        return crypto.randomUUID();
+    }
+    return Date.now().toString(36) + Math.random().toString(36).substring(2);
+};
 
 const App: React.FC = () => {
   const [view, setView] = useState<AppView>(AppView.AUTH);
@@ -16,7 +22,14 @@ const App: React.FC = () => {
   const [activeDoc, setActiveDoc] = useState<Document | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [isOpeningDoc, setIsOpeningDoc] = useState(false);
   
+  // Auth State
+  const [isSignUp, setIsSignUp] = useState(false);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [authError, setAuthError] = useState('');
+
   // Analytics State
   const [stats, setStats] = useState<AnalyticsData>({
     totalDocs: 0,
@@ -26,20 +39,57 @@ const App: React.FC = () => {
     recentActivity: []
   });
 
-  // Load from IndexedDB on mount
+  // Check Session on Mount
+  useEffect(() => {
+    const initSession = async () => {
+        try {
+            const { data: { session } } = await supabase.auth.getSession();
+            if (session) {
+                setUser({ 
+                    id: session.user.id, 
+                    email: session.user.email!, 
+                    name: session.user.user_metadata.full_name || session.user.email!.split('@')[0] 
+                });
+                setView(AppView.DASHBOARD);
+            }
+        } catch (e) {
+            console.error("Session init error:", e);
+        }
+    };
+    initSession();
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session) {
+        setUser({ 
+            id: session.user.id, 
+            email: session.user.email!, 
+            name: session.user.user_metadata.full_name || session.user.email!.split('@')[0] 
+        });
+        if (view === AppView.AUTH) {
+            setView(AppView.DASHBOARD);
+        }
+      } else {
+        setUser(null);
+        setView(AppView.AUTH);
+      }
+    });
+
+    return () => subscription.unsubscribe();
+  }, []); // Remove dependency on 'view' to prevent loop
+
+  // Load Documents when View changes (and user exists)
   useEffect(() => {
     const loadDocs = async () => {
+      if (!user) return;
       setIsLoading(true);
       try {
         const storedDocs = await getAllDocuments();
         setDocuments(storedDocs);
         
-        // Recalculate basic stats based on loaded docs
+        // Basic Stats
         setStats(prev => ({
           ...prev,
           totalDocs: storedDocs.length,
-          // In a real app we'd aggregate these from doc properties, 
-          // for now we just update the count.
         }));
       } catch (error) {
         console.error("Failed to load documents:", error);
@@ -48,28 +98,76 @@ const App: React.FC = () => {
       }
     };
 
-    if (view !== AppView.AUTH) {
+    if (view !== AppView.AUTH && user) {
       loadDocs();
     }
-  }, [view]);
+  }, [view, user]);
 
-  // Handlers
-  const handleLogin = (e: React.FormEvent) => {
+  // Auth Handlers
+  const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
-    setUser(MOCK_USER);
-    setView(AppView.DASHBOARD);
+    setAuthError('');
+    setIsLoading(true);
+    
+    try {
+        if (isSignUp) {
+            const { data, error } = await supabase.auth.signUp({
+                email,
+                password,
+                options: {
+                  data: {
+                    full_name: email.split('@')[0], // Generate a default name from email
+                  }
+                }
+            });
+            if (error) throw error;
+            
+            // If session is null, it usually means email confirmation is required
+            if (data.user && !data.session) {
+                setAuthError("Compte créé ! Veuillez vérifier votre e-mail pour confirmer votre compte avant de vous connecter.");
+                // Switch to login view so they can login after confirming
+                setIsSignUp(false);
+            } else {
+                // Auto-login successful
+                // State update handled by onAuthStateChange listener
+            }
+        } else {
+            const { error } = await supabase.auth.signInWithPassword({
+                email,
+                password,
+            });
+            if (error) throw error;
+        }
+    } catch (err: any) {
+        console.error("Auth Error:", err);
+        if (err.message && err.message.includes("Invalid login credentials")) {
+            setAuthError("E-mail ou mot de passe incorrect. Si vous n'avez pas encore de compte, veuillez vous inscrire.");
+        } else if (err.message && (err.message.includes("Email not confirmed") || err.message.includes("Email not verified"))) {
+            setAuthError("E-mail non confirmé. Veuillez vérifier votre boîte de réception ou désactiver 'Confirm Email' dans votre tableau de bord Supabase (Authentication > Providers > Email).");
+        } else {
+            setAuthError(err.message || "Une erreur inattendue s'est produite lors de l'authentification.");
+        }
+    } finally {
+        setIsLoading(false);
+    }
+  };
+
+  const handleSignOut = async () => {
+    await supabase.auth.signOut();
+    setDocuments([]);
+    setUser(null);
+    setView(AppView.AUTH);
   };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) {
+    if (file && user) {
       if (file.type !== 'application/pdf') {
-        alert("Please upload a PDF file.");
+        alert("Veuillez télécharger un fichier PDF.");
         return;
       }
-      // Increased limit because IndexedDB can handle it, but keep reasonable for browser performance
-      if (file.size > 25 * 1024 * 1024) { // 25MB limit
-        alert("File size exceeds 25MB limit.");
+      if (file.size > 25 * 1024 * 1024) { 
+        alert("La taille du fichier dépasse la limite de 25 Mo.");
         return;
       }
 
@@ -77,8 +175,11 @@ const App: React.FC = () => {
       const reader = new FileReader();
       reader.onload = async (event) => {
         const base64 = event.target?.result as string;
+        // Generate a UUID for the document ID with fallback
+        const docId = generateId();
+
         const newDoc: Document = {
-          id: Date.now().toString(),
+          id: docId,
           name: file.name,
           size: file.size,
           type: file.type,
@@ -88,16 +189,17 @@ const App: React.FC = () => {
         };
         
         try {
-          await saveDocument(newDoc); // Save to DB
+          await saveDocument(newDoc); // Save to Supabase
+          // For local state update immediately after upload, we keep the base64
           setDocuments(prev => [newDoc, ...prev]);
           setStats(prev => ({
             ...prev, 
             totalDocs: prev.totalDocs + 1,
-            recentActivity: [{ action: 'Uploaded', time: 'Just now', docName: file.name }, ...prev.recentActivity]
+            recentActivity: [{ action: 'Téléchargé', time: "À l'instant", docName: file.name }, ...prev.recentActivity]
           }));
-        } catch (error) {
+        } catch (error: any) {
           console.error("Failed to save document:", error);
-          alert("Failed to save document to storage.");
+          alert(`Échec du téléchargement : ${error.message}`);
         } finally {
           setIsLoading(false);
         }
@@ -108,10 +210,10 @@ const App: React.FC = () => {
 
   const handleDeleteDoc = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    if (!confirm("Are you sure you want to delete this document and all its data?")) return;
+    if (!confirm("Êtes-vous sûr de vouloir supprimer ce document ?")) return;
     
     try {
-      await deleteDocument(id); // Remove from DB
+      await deleteDocument(id);
       setDocuments(prev => prev.filter(d => d.id !== id));
       setStats(prev => ({ ...prev, totalDocs: prev.totalDocs - 1 }));
     } catch (error) {
@@ -121,7 +223,7 @@ const App: React.FC = () => {
 
   const handleDeleteActiveDoc = async () => {
     if (!activeDoc) return;
-    if (!confirm(`Are you sure you want to delete "${activeDoc.name}"? This cannot be undone.`)) return;
+    if (!confirm(`Êtes-vous sûr de vouloir supprimer "${activeDoc.name}" ?`)) return;
 
     try {
       await deleteDocument(activeDoc.id);
@@ -131,12 +233,12 @@ const App: React.FC = () => {
       setView(AppView.LIBRARY);
     } catch (error) {
       console.error("Failed to delete active document:", error);
-      alert("Failed to delete document.");
+      alert("Échec de la suppression du document.");
     }
   };
 
   const handleClearAllData = async () => {
-    if (!confirm("⚠️ WARNING: This will delete ALL documents, chat history, and flashcards permanently from your browser storage.\n\nAre you sure?")) return;
+    if (!confirm("⚠️ ATTENTION : Cela supprimera définitivement TOUS vos documents du cloud.\n\nÊtes-vous sûr ?")) return;
     
     setIsLoading(true);
     try {
@@ -150,21 +252,20 @@ const App: React.FC = () => {
         recentActivity: []
       });
       setView(AppView.DASHBOARD);
-      alert("Storage cleared successfully.");
+      alert("Stockage cloud effacé avec succès.");
     } catch (e) {
       console.error("Failed to clear data:", e);
-      alert("Failed to clear data.");
+      alert("Échec de l'effacement des données.");
     } finally {
       setIsLoading(false);
     }
   };
 
   const handleUpdateDocument = async (updatedDoc: Document) => {
-    // Update local state
     setDocuments(prev => prev.map(d => d.id === updatedDoc.id ? updatedDoc : d));
     setActiveDoc(updatedDoc);
     
-    // Persist to DB
+    // Debounce updates in a real app, but here we just save
     try {
       await saveDocument(updatedDoc);
     } catch (error) {
@@ -172,19 +273,46 @@ const App: React.FC = () => {
     }
   };
 
-  const openDocument = (doc: Document) => {
-    setActiveDoc(doc);
-    setView(AppView.WORKSPACE);
+  const openDocument = async (doc: Document) => {
+    // If the document already has data (e.g. just uploaded), open it directly
+    if (doc.base64Data) {
+      setActiveDoc(doc);
+      setView(AppView.WORKSPACE);
+      return;
+    }
+
+    if (!doc.file_path) {
+      alert("Erreur : Le chemin du fichier est manquant pour ce document.");
+      return;
+    }
+
+    // Otherwise, fetch the PDF content from storage
+    setIsOpeningDoc(true);
+    try {
+      const content = await loadDocumentFile(doc.file_path);
+      const fullDoc = { ...doc, base64Data: content };
+      setActiveDoc(fullDoc);
+      
+      // Update local state so we don't fetch again this session
+      setDocuments(prev => prev.map(d => d.id === doc.id ? fullDoc : d));
+      
+      setView(AppView.WORKSPACE);
+    } catch (error) {
+      console.error("Failed to load document content:", error);
+      alert("Impossible de charger le fichier du document. Veuillez réessayer.");
+    } finally {
+      setIsOpeningDoc(false);
+    }
   };
 
   const updateStats = (type: 'flashcard' | 'quiz', count: number) => {
     setStats(prev => {
        const newActivity = [...prev.recentActivity];
        if (type === 'flashcard') {
-         newActivity.unshift({ action: 'Generated Flashcards', time: 'Just now', docName: activeDoc?.name || 'Doc' });
+         newActivity.unshift({ action: 'Flashcards générées', time: "À l'instant", docName: activeDoc?.name || 'Doc' });
          return { ...prev, totalFlashcardsGenerated: prev.totalFlashcardsGenerated + count, recentActivity: newActivity.slice(0, 5) };
        } else {
-         newActivity.unshift({ action: 'Completed Quiz', time: 'Just now', docName: activeDoc?.name || 'Doc' });
+         newActivity.unshift({ action: 'Quiz terminé', time: "À l'instant", docName: activeDoc?.name || 'Doc' });
          return { ...prev, quizzesTaken: prev.quizzesTaken + count, recentActivity: newActivity.slice(0, 5) };
        }
     });
@@ -192,7 +320,7 @@ const App: React.FC = () => {
 
   // --- Views ---
 
-  const AuthView = () => (
+  const renderAuthView = () => (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-indigo-500 to-purple-600 p-4">
       <div className="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-md">
         <div className="text-center mb-8">
@@ -200,38 +328,77 @@ const App: React.FC = () => {
              <Zap className="text-indigo-600 w-8 h-8" fill="currentColor" />
           </div>
           <h1 className="text-3xl font-bold text-slate-900">Lumina</h1>
-          <p className="text-slate-500 mt-2">AI-Powered Learning Assistant</p>
+          <p className="text-slate-500 mt-2">Assistant d'apprentissage IA</p>
         </div>
-        <form onSubmit={handleLogin} className="space-y-4">
+        
+        {authError && (
+            <div className={`mb-6 p-4 rounded-xl border flex items-start gap-3 text-sm ${authError.includes('Compte créé') ? 'bg-green-50 text-green-700 border-green-200' : 'bg-red-50 text-red-600 border-red-200'}`}>
+                <AlertCircle size={20} className="shrink-0 mt-0.5" />
+                <p>{authError}</p>
+            </div>
+        )}
+
+        <form onSubmit={handleAuth} className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1">Email</label>
-            <input type="email" required className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none" placeholder="student@example.com" />
+            <input 
+                type="email" 
+                required 
+                className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none" 
+                placeholder="etudiant@exemple.com" 
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+            />
           </div>
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Password</label>
-            <input type="password" required className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none" placeholder="••••••••" />
+            <label className="block text-sm font-medium text-slate-700 mb-1">Mot de passe</label>
+            <input 
+                type="password" 
+                required 
+                minLength={6}
+                className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none" 
+                placeholder="••••••••" 
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+            />
           </div>
-          <button type="submit" className="w-full bg-indigo-600 text-white py-2 rounded-lg font-semibold hover:bg-indigo-700 transition-colors">
-            Sign In
+          <button 
+             type="submit" 
+             disabled={isLoading}
+             className="w-full bg-indigo-600 text-white py-2 rounded-lg font-semibold hover:bg-indigo-700 transition-colors flex items-center justify-center gap-2"
+          >
+            {isLoading ? <Loader2 className="animate-spin" size={20} /> : (isSignUp ? <UserPlus size={20} /> : <LogIn size={20} />)}
+            {isSignUp ? 'Créer un compte' : 'Se connecter'}
           </button>
         </form>
-        <p className="mt-4 text-center text-xs text-slate-400">Mock Login - Enter anything to continue</p>
+
+        <div className="mt-6 text-center">
+             <p className="text-sm text-slate-600">
+                 {isSignUp ? "Vous avez déjà un compte ?" : "Pas encore de compte ?"}
+                 <button 
+                    onClick={() => { setIsSignUp(!isSignUp); setAuthError(''); }}
+                    className="ml-2 text-indigo-600 font-medium hover:underline focus:outline-none"
+                 >
+                     {isSignUp ? "Se connecter" : "S'inscrire"}
+                 </button>
+             </p>
+        </div>
       </div>
     </div>
   );
 
-  const DashboardView = () => {
+  const renderDashboardView = () => {
     const chartData = [
       { name: 'Docs', value: stats.totalDocs },
-      { name: 'Cards', value: stats.totalFlashcardsGenerated },
-      { name: 'Quizzes', value: stats.quizzesTaken },
+      { name: 'Cartes', value: stats.totalFlashcardsGenerated },
+      { name: 'Quiz', value: stats.quizzesTaken },
     ];
 
     return (
       <div className="p-8 max-w-7xl mx-auto">
         <header className="mb-8">
-          <h2 className="text-2xl font-bold text-slate-800">Welcome back, {user?.name}</h2>
-          <p className="text-slate-500">Here is your learning progress.</p>
+          <h2 className="text-2xl font-bold text-slate-800">Ravi de vous revoir, {user?.name}</h2>
+          <p className="text-slate-500">Voici votre progression d'apprentissage.</p>
         </header>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
@@ -245,13 +412,13 @@ const App: React.FC = () => {
            </div>
            <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex items-center gap-4">
              <div className="p-3 bg-green-50 text-green-600 rounded-xl"><BarChart2 size={24} /></div>
-             <div><p className="text-sm text-slate-500">Quizzes Taken</p><p className="text-2xl font-bold text-slate-800">{stats.quizzesTaken}</p></div>
+             <div><p className="text-sm text-slate-500">Quiz terminés</p><p className="text-2xl font-bold text-slate-800">{stats.quizzesTaken}</p></div>
            </div>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
            <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 h-80">
-              <h3 className="font-semibold text-slate-800 mb-4">Activity Overview</h3>
+              <h3 className="font-semibold text-slate-800 mb-4">Aperçu de l'activité</h3>
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={chartData}>
                   <XAxis dataKey="name" stroke="#94a3b8" fontSize={12} tickLine={false} axisLine={false} />
@@ -262,14 +429,14 @@ const App: React.FC = () => {
               </ResponsiveContainer>
            </div>
            <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 h-80 overflow-y-auto">
-              <h3 className="font-semibold text-slate-800 mb-4">Recent Activity</h3>
+              <h3 className="font-semibold text-slate-800 mb-4">Activité récente</h3>
               <div className="space-y-4">
-                {stats.recentActivity.length === 0 && <p className="text-slate-400 text-sm">No activity yet.</p>}
+                {stats.recentActivity.length === 0 && <p className="text-slate-400 text-sm">Aucune activité pour le moment.</p>}
                 {stats.recentActivity.map((act, i) => (
                   <div key={i} className="flex items-center gap-3 text-sm">
                     <div className="w-2 h-2 rounded-full bg-indigo-400"></div>
                     <span className="font-medium text-slate-700">{act.action}</span>
-                    <span className="text-slate-500">on {act.docName}</span>
+                    <span className="text-slate-500">sur {act.docName}</span>
                     <span className="text-slate-400 ml-auto text-xs">{act.time}</span>
                   </div>
                 ))}
@@ -280,24 +447,32 @@ const App: React.FC = () => {
     );
   };
 
-  const LibraryView = () => {
+  const renderLibraryView = () => {
     const filteredDocs = documents.filter(doc => 
       doc.name.toLowerCase().includes(searchQuery.toLowerCase())
     );
 
     return (
-      <div className="p-8 max-w-7xl mx-auto">
+      <div className="p-8 max-w-7xl mx-auto relative">
+        {/* Loading Overlay when opening document */}
+        {isOpeningDoc && (
+          <div className="absolute inset-0 z-50 bg-white/80 flex flex-col items-center justify-center backdrop-blur-sm rounded-xl">
+             <Loader2 className="w-12 h-12 text-indigo-600 animate-spin mb-4" />
+             <p className="text-lg font-medium text-slate-700">Téléchargement de votre document...</p>
+          </div>
+        )}
+
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
           <div>
-            <h2 className="text-2xl font-bold text-slate-800">Your Documents</h2>
-            <p className="text-slate-500">Upload PDFs to start learning. Saved locally on your device.</p>
+            <h2 className="text-2xl font-bold text-slate-800">Vos documents</h2>
+            <p className="text-slate-500">Stockés en toute sécurité dans le cloud.</p>
           </div>
           <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
             <div className="relative w-full md:w-64">
                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
                <input 
                   type="text" 
-                  placeholder="Search documents..." 
+                  placeholder="Rechercher..." 
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
@@ -305,7 +480,7 @@ const App: React.FC = () => {
             </div>
             <label className={`flex items-center justify-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors cursor-pointer shadow-md whitespace-nowrap ${isLoading ? 'opacity-50 pointer-events-none' : ''}`}>
               {isLoading ? <Loader2 size={20} className="animate-spin" /> : <UploadCloud size={20} />}
-              <span>{isLoading ? 'Saving...' : 'Upload PDF'}</span>
+              <span>{isLoading ? 'Sauvegarde...' : 'Ajouter PDF'}</span>
               <input type="file" className="hidden" accept="application/pdf" onChange={handleFileUpload} disabled={isLoading} />
             </label>
           </div>
@@ -314,13 +489,13 @@ const App: React.FC = () => {
         {documents.length === 0 && !isLoading ? (
           <div className="flex flex-col items-center justify-center h-64 border-2 border-dashed border-slate-300 rounded-2xl bg-slate-50 text-slate-500">
              <UploadCloud size={48} className="mb-4 text-slate-400" />
-             <p className="text-lg font-medium">No documents yet</p>
-             <p className="text-sm">Upload a PDF to get started</p>
+             <p className="text-lg font-medium">Aucun document</p>
+             <p className="text-sm">Téléchargez un PDF pour commencer</p>
           </div>
         ) : filteredDocs.length === 0 && !isLoading ? (
           <div className="flex flex-col items-center justify-center h-40 text-slate-500">
              <Search size={32} className="mb-2 opacity-50" />
-             <p>No documents found matching "{searchQuery}"</p>
+             <p>Aucun document trouvé pour "{searchQuery}"</p>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -354,7 +529,7 @@ const App: React.FC = () => {
     );
   };
 
-  if (view === AppView.AUTH) return <AuthView />;
+  if (view === AppView.AUTH) return renderAuthView();
   if (view === AppView.WORKSPACE && activeDoc) {
     return (
       <Workspace 
@@ -381,13 +556,13 @@ const App: React.FC = () => {
             onClick={() => setView(AppView.DASHBOARD)}
             className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${view === AppView.DASHBOARD ? 'bg-indigo-50 text-indigo-600 font-medium' : 'text-slate-500 hover:bg-slate-50'}`}
           >
-            <LayoutDashboard size={20} /> Dashboard
+            <LayoutDashboard size={20} /> Tableau de bord
           </button>
           <button 
             onClick={() => setView(AppView.LIBRARY)}
             className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${view === AppView.LIBRARY ? 'bg-indigo-50 text-indigo-600 font-medium' : 'text-slate-500 hover:bg-slate-50'}`}
           >
-            <FolderOpen size={20} /> My Documents
+            <FolderOpen size={20} /> Mes documents
           </button>
         </nav>
         <div className="p-6 border-t border-slate-100 space-y-2">
@@ -402,11 +577,11 @@ const App: React.FC = () => {
           </div>
           
           <button onClick={handleClearAllData} className="w-full flex items-center gap-2 text-sm text-slate-500 hover:text-red-600 hover:bg-red-50 p-2 rounded-lg transition-colors">
-             <Database size={16} /> Clear Storage
+             <Database size={16} /> Vider le cloud
           </button>
 
-          <button onClick={() => setView(AppView.AUTH)} className="w-full flex items-center gap-2 text-sm text-slate-500 hover:text-slate-800 hover:bg-slate-50 p-2 rounded-lg transition-colors">
-            <LogOut size={16} /> Sign Out
+          <button onClick={handleSignOut} className="w-full flex items-center gap-2 text-sm text-slate-500 hover:text-slate-800 hover:bg-slate-50 p-2 rounded-lg transition-colors">
+            <LogOut size={16} /> Déconnexion
           </button>
         </div>
       </aside>
@@ -422,8 +597,8 @@ const App: React.FC = () => {
            </div>
         </div>
 
-        {view === AppView.DASHBOARD && <DashboardView />}
-        {view === AppView.LIBRARY && <LibraryView />}
+        {view === AppView.DASHBOARD && renderDashboardView()}
+        {view === AppView.LIBRARY && renderLibraryView()}
       </main>
     </div>
   );

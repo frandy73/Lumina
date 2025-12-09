@@ -82,6 +82,7 @@ const Workspace: React.FC<WorkspaceProps> = ({ document: doc, onBack, onDelete, 
 
   // --- Focus Mode (Pomodoro) State ---
   const [showFocusTimer, setShowFocusTimer] = useState(false);
+  const [timerMessage, setTimerMessage] = useState<string | null>(null);
   const [focusState, setFocusState] = useState<{
     time: number;
     isRunning: boolean;
@@ -97,17 +98,23 @@ const Workspace: React.FC<WorkspaceProps> = ({ document: doc, onBack, onDelete, 
     } else if (focusState.time === 0 && focusState.isRunning) {
       // Timer finished
       setFocusState(prev => ({ ...prev, isRunning: false }));
-      const audio = new Audio('https://actions.google.com/sounds/v1/alarms/beep_short.ogg');
-      audio.play().catch(() => {});
       
-      // Auto switch suggested but manual trigger for now to not be annoying
+      const audio = new Audio('https://actions.google.com/sounds/v1/alarms/beep_short.ogg');
+      audio.play().catch(e => console.error("Audio play failed", e));
+      
+      // Auto switch suggested but manual trigger for now
       if (focusState.mode === 'focus') {
-         alert("Focus session complete! Time for a break.");
+         setTimerMessage("🎉 Session terminée ! Prenez une pause.");
          setFocusState({ time: 5 * 60, isRunning: false, mode: 'break' });
+         setShowFocusTimer(true); // Ensure widget is visible
       } else {
-         alert("Break over! Ready to focus?");
+         setTimerMessage("🔔 Pause terminée ! Prêt à reprendre ?");
          setFocusState({ time: 25 * 60, isRunning: false, mode: 'focus' });
+         setShowFocusTimer(true);
       }
+      
+      // Clear message after 5 seconds
+      setTimeout(() => setTimerMessage(null), 5000);
     }
     return () => clearInterval(interval);
   }, [focusState.isRunning, focusState.time, focusState.mode]);
@@ -263,7 +270,7 @@ const Workspace: React.FC<WorkspaceProps> = ({ document: doc, onBack, onDelete, 
       const errorMessage: ChatMessage = {
         id: (Date.now() + 1).toString(),
         role: 'model',
-        text: "Sorry, I encountered an error responding to that.",
+        text: "Désolé, j'ai rencontré une erreur.",
         timestamp: Date.now()
       };
       setMessages([...updatedMessages, errorMessage]);
@@ -284,7 +291,7 @@ const Workspace: React.FC<WorkspaceProps> = ({ document: doc, onBack, onDelete, 
         summaryLang: summaryLang as any 
       });
     } catch (e) {
-      setSummary("Failed to generate summary.");
+      setSummary("Échec de la génération du résumé.");
     } finally {
       setIsSummaryLoading(false);
     }
@@ -336,7 +343,7 @@ const Workspace: React.FC<WorkspaceProps> = ({ document: doc, onBack, onDelete, 
       const text = textContent.items.map((item: any) => item.str).join(' ');
       
       if (!text.trim()) {
-        alert("No readable text found on this page.");
+        alert("Aucun texte lisible trouvé sur cette page.");
         setIsReading(false);
         return;
       }
@@ -381,7 +388,7 @@ const Workspace: React.FC<WorkspaceProps> = ({ document: doc, onBack, onDelete, 
       const result = await explainConcept(doc, text);
       setExplainerOverlay({ show: true, term: text, text: result });
     } catch (e) {
-      setExplainerOverlay({ show: true, term: text, text: "Failed to explain." });
+      setExplainerOverlay({ show: true, term: text, text: "Échec de l'explication." });
     }
   };
 
@@ -459,7 +466,7 @@ const Workspace: React.FC<WorkspaceProps> = ({ document: doc, onBack, onDelete, 
         {messages.length === 0 && (
           <div className="text-center text-slate-500 mt-10">
             <Brain className="w-12 h-12 mx-auto mb-2 opacity-50" />
-            <p>Ask me anything about <span className="font-semibold">{doc.name}</span>!</p>
+            <p>Posez-moi une question sur <span className="font-semibold">{doc.name}</span> !</p>
           </div>
         )}
         {messages.map((msg) => (
@@ -484,7 +491,7 @@ const Workspace: React.FC<WorkspaceProps> = ({ document: doc, onBack, onDelete, 
           <div className="flex justify-start">
              <div className="bg-white border border-slate-200 rounded-2xl p-3 px-4 shadow-sm flex items-center gap-2">
                 <Loader2 className="w-4 h-4 animate-spin text-indigo-600" />
-                <span className="text-sm text-slate-500">Thinking...</span>
+                <span className="text-sm text-slate-500">Réflexion...</span>
              </div>
           </div>
         )}
@@ -495,7 +502,7 @@ const Workspace: React.FC<WorkspaceProps> = ({ document: doc, onBack, onDelete, 
           <input 
             type="text" 
             className="flex-1 border border-slate-300 rounded-full px-4 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
-            placeholder="Type your question..."
+            placeholder="Posez votre question..."
             value={inputMessage}
             onChange={(e) => setInputMessage(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
@@ -516,7 +523,7 @@ const Workspace: React.FC<WorkspaceProps> = ({ document: doc, onBack, onDelete, 
     <div className="h-full flex flex-col p-6 overflow-y-auto">
       <div className="flex justify-between items-start mb-6">
         <h3 className="text-xl font-bold text-slate-800 flex items-center gap-2">
-          <FileText className="text-indigo-600" /> Summarizer
+          <FileText className="text-indigo-600" /> Résumé
         </h3>
         <div className="flex gap-2 text-sm">
           <select 
@@ -525,24 +532,24 @@ const Workspace: React.FC<WorkspaceProps> = ({ document: doc, onBack, onDelete, 
             className="border border-slate-300 rounded-lg px-2 py-1 bg-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
           >
             <option value="simple">Simple (Vulgarisation)</option>
-            <option value="analytical">Analytical</option>
-            <option value="pedagogical">Pedagogical (Professor)</option>
-            <option value="concrete">Concrete Applications</option>
+            <option value="analytical">Analytique</option>
+            <option value="pedagogical">Pédagogique (Professeur)</option>
+            <option value="concrete">Concret</option>
           </select>
           <select 
             value={summaryLang} 
             onChange={(e) => setSummaryLang(e.target.value)}
             className="border border-slate-300 rounded-lg px-2 py-1 bg-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
           >
-            <option value="en">English</option>
+            <option value="en">Anglais</option>
             <option value="fr">Français</option>
-            <option value="ht">Kreyòl (HT)</option>
+            <option value="ht">Créole Haïtien</option>
           </select>
           {summary && (
             <button 
               onClick={handleDownloadSummary} 
               className="p-2 text-slate-600 hover:bg-indigo-50 hover:text-indigo-600 rounded-lg transition-colors"
-              title="Download Markdown"
+              title="Télécharger Markdown"
             >
               <Download size={16} />
             </button>
@@ -550,7 +557,7 @@ const Workspace: React.FC<WorkspaceProps> = ({ document: doc, onBack, onDelete, 
           <button 
              onClick={handleGenerateSummary}
              className="p-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700"
-             title="Regenerate"
+             title="Régénérer"
           >
             <RefreshCw size={16} />
           </button>
@@ -559,14 +566,14 @@ const Workspace: React.FC<WorkspaceProps> = ({ document: doc, onBack, onDelete, 
 
       {!summary && !isSummaryLoading && (
         <div className="flex flex-col items-center justify-center flex-1 text-slate-500">
-          <p className="mb-4">Generate a summary tailored to your needs.</p>
-          <button onClick={handleGenerateSummary} className="px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors">Generate</button>
+          <p className="mb-4">Générez un résumé adapté à vos besoins.</p>
+          <button onClick={handleGenerateSummary} className="px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors">Générer</button>
         </div>
       )}
       {isSummaryLoading && (
         <div className="flex flex-col items-center justify-center flex-1 text-slate-500">
           <Loader2 className="w-10 h-10 animate-spin text-indigo-600 mb-2" />
-          <p>Analyzing document...</p>
+          <p>Analyse du document...</p>
         </div>
       )}
       {summary && !isSummaryLoading && (
@@ -585,21 +592,21 @@ const Workspace: React.FC<WorkspaceProps> = ({ document: doc, onBack, onDelete, 
         </h3>
         {flashcards.length > 0 && (
           <div className="flex gap-2">
-            <button onClick={handleDownloadFlashcards} className="p-2 text-slate-600 hover:bg-indigo-50 hover:text-indigo-600 rounded-lg" title="Export to Anki (CSV)"><Download size={18} /></button>
-            <button onClick={handleShuffleFlashcards} className="p-2 text-slate-600 hover:bg-slate-100 rounded-lg" title="Shuffle"><Shuffle size={18} /></button>
-            <button onClick={handleGenerateFlashcards} className="p-2 text-slate-600 hover:bg-slate-100 rounded-lg" title="Regenerate"><RefreshCw size={18} /></button>
+            <button onClick={handleDownloadFlashcards} className="p-2 text-slate-600 hover:bg-indigo-50 hover:text-indigo-600 rounded-lg" title="Exporter pour Anki (CSV)"><Download size={18} /></button>
+            <button onClick={handleShuffleFlashcards} className="p-2 text-slate-600 hover:bg-slate-100 rounded-lg" title="Mélanger"><Shuffle size={18} /></button>
+            <button onClick={handleGenerateFlashcards} className="p-2 text-slate-600 hover:bg-slate-100 rounded-lg" title="Régénérer"><RefreshCw size={18} /></button>
           </div>
         )}
       </div>
 
       {!flashcards.length && !isFlashcardsLoading && (
         <div className="flex flex-col items-center justify-center flex-1 text-slate-500">
-          <p className="mb-4">Create study cards from this document.</p>
+          <p className="mb-4">Créez des cartes d'étude à partir de ce document.</p>
           <button 
             onClick={handleGenerateFlashcards}
             className="px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
           >
-            Generate Cards
+            Générer les cartes
           </button>
         </div>
       )}
@@ -607,7 +614,7 @@ const Workspace: React.FC<WorkspaceProps> = ({ document: doc, onBack, onDelete, 
       {isFlashcardsLoading && (
          <div className="flex flex-col items-center justify-center flex-1 text-slate-500">
           <Loader2 className="w-10 h-10 animate-spin text-indigo-600 mb-2" />
-          <p>Generating cards...</p>
+          <p>Génération des cartes...</p>
         </div>
       )}
 
@@ -634,7 +641,7 @@ const Workspace: React.FC<WorkspaceProps> = ({ document: doc, onBack, onDelete, 
               
               {/* Back */}
               <div className="absolute w-full h-full backface-hidden bg-indigo-600 text-white rounded-2xl shadow-lg p-8 flex flex-col items-center justify-center text-center" style={{ transform: 'rotateY(180deg)' }}>
-                <span className="text-xs font-semibold uppercase tracking-wider text-indigo-200 mb-2">Answer</span>
+                <span className="text-xs font-semibold uppercase tracking-wider text-indigo-200 mb-2">Réponse</span>
                 <p className="text-lg font-medium">{flashcards[currentCardIndex].back}</p>
                 <button 
                   onClick={(e) => { e.stopPropagation(); speakText(flashcards[currentCardIndex].back); }}
@@ -673,14 +680,14 @@ const Workspace: React.FC<WorkspaceProps> = ({ document: doc, onBack, onDelete, 
   const renderQuiz = () => (
     <div className="h-full flex flex-col p-6 overflow-y-auto">
       <h3 className="text-xl font-bold text-slate-800 mb-6 flex items-center gap-2">
-        <CheckCircle className="text-indigo-600" /> AI Quiz
+        <CheckCircle className="text-indigo-600" /> Quiz IA
       </h3>
 
       {showQuizSetup && !isQuizLoading && (
          <div className="flex-1 flex flex-col items-center justify-center max-w-md mx-auto w-full">
             <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm w-full space-y-6">
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">Number of Questions</label>
+                <label className="block text-sm font-medium text-slate-700 mb-2">Nombre de questions</label>
                 <div className="flex gap-2">
                   {[3, 5, 10, 15].map(n => (
                     <button 
@@ -694,11 +701,11 @@ const Workspace: React.FC<WorkspaceProps> = ({ document: doc, onBack, onDelete, 
                 </div>
               </div>
               <div>
-                 <label className="block text-sm font-medium text-slate-700 mb-2">Focus Topic / Chapter (Optional)</label>
+                 <label className="block text-sm font-medium text-slate-700 mb-2">Sujet / Chapitre (Optionnel)</label>
                  <input 
                    type="text"
                    className="w-full border border-slate-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
-                   placeholder="e.g. Chapter 4, Conclusion..."
+                   placeholder="ex: Chapitre 4, Conclusion..."
                    value={quizConfig.topic}
                    onChange={(e) => setQuizConfig({...quizConfig, topic: e.target.value})}
                  />
@@ -707,7 +714,7 @@ const Workspace: React.FC<WorkspaceProps> = ({ document: doc, onBack, onDelete, 
                 onClick={handleStartQuiz}
                 className="w-full py-3 bg-indigo-600 text-white rounded-lg font-semibold hover:bg-indigo-700 transition-colors flex items-center justify-center gap-2"
               >
-                <Play size={18} /> Generate Quiz
+                <Play size={18} /> Générer le Quiz
               </button>
             </div>
          </div>
@@ -716,15 +723,15 @@ const Workspace: React.FC<WorkspaceProps> = ({ document: doc, onBack, onDelete, 
       {isQuizLoading && (
         <div className="flex flex-col items-center justify-center flex-1 text-slate-500">
           <Loader2 className="w-10 h-10 animate-spin text-indigo-600 mb-2" />
-          <p>Generating tailored questions...</p>
+          <p>Génération des questions...</p>
         </div>
       )}
 
       {!showQuizSetup && !isQuizLoading && quizQuestions.length > 0 && !quizFinished && (
         <div className="max-w-2xl mx-auto w-full flex-1">
           <div className="mb-6 flex justify-between items-center text-sm text-slate-500 font-medium">
-             <button onClick={() => setShowQuizSetup(true)} className="text-indigo-600 hover:underline">Exit Quiz</button>
-             <span>Question {currentQuestionIndex + 1} of {quizQuestions.length}</span>
+             <button onClick={() => setShowQuizSetup(true)} className="text-indigo-600 hover:underline">Quitter le Quiz</button>
+             <span>Question {currentQuestionIndex + 1} sur {quizQuestions.length}</span>
           </div>
           
           <h4 className="text-lg font-semibold text-slate-800 mb-6">
@@ -763,7 +770,7 @@ const Workspace: React.FC<WorkspaceProps> = ({ document: doc, onBack, onDelete, 
 
           {selectedAnswer !== null && (
             <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="mt-6 p-4 bg-indigo-50 border border-indigo-100 rounded-xl text-sm text-indigo-900">
-              <span className="font-bold block mb-1">Explanation:</span>
+              <span className="font-bold block mb-1">Explication :</span>
               {quizQuestions[currentQuestionIndex].explanation}
             </motion.div>
           )}
@@ -782,7 +789,7 @@ const Workspace: React.FC<WorkspaceProps> = ({ document: doc, onBack, onDelete, 
                 }}
                 className="px-6 py-2 bg-slate-900 text-white rounded-lg hover:bg-slate-800 transition-colors flex items-center gap-2"
                >
-                 {currentQuestionIndex === quizQuestions.length - 1 ? 'Finish' : 'Next Question'} <ArrowRight size={16} />
+                 {currentQuestionIndex === quizQuestions.length - 1 ? 'Terminer' : 'Question suivante'} <ArrowRight size={16} />
                </button>
              </div>
           )}
@@ -794,13 +801,13 @@ const Workspace: React.FC<WorkspaceProps> = ({ document: doc, onBack, onDelete, 
           <div className="w-20 h-20 bg-green-100 text-green-600 rounded-full flex items-center justify-center mb-6">
             <CheckCircle size={40} />
           </div>
-          <h3 className="text-2xl font-bold text-slate-900 mb-2">Quiz Completed!</h3>
-          <p className="text-slate-500 mb-6">You scored <span className="font-bold text-indigo-600 text-xl">{quizScore}</span> out of {quizQuestions.length}</p>
+          <h3 className="text-2xl font-bold text-slate-900 mb-2">Quiz terminé !</h3>
+          <p className="text-slate-500 mb-6">Vous avez obtenu <span className="font-bold text-indigo-600 text-xl">{quizScore}</span> sur {quizQuestions.length}</p>
           <button 
             onClick={() => setShowQuizSetup(true)}
             className="px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
           >
-            Start New Quiz
+            Nouveau Quiz
           </button>
         </div>
       )}
@@ -810,22 +817,22 @@ const Workspace: React.FC<WorkspaceProps> = ({ document: doc, onBack, onDelete, 
   const renderDeepDive = () => (
     <div className="h-full flex flex-col p-6 overflow-hidden">
        <div className="flex gap-4 border-b border-slate-200 mb-4 pb-1">
-         <button onClick={() => setActiveDeepDiveTab('mindmap')} className={`pb-2 px-1 text-sm font-medium ${activeDeepDiveTab === 'mindmap' ? 'text-indigo-600 border-b-2 border-indigo-600' : 'text-slate-500 hover:text-slate-700'}`}>Mindmap</button>
-         <button onClick={() => setActiveDeepDiveTab('strategy')} className={`pb-2 px-1 text-sm font-medium ${activeDeepDiveTab === 'strategy' ? 'text-indigo-600 border-b-2 border-indigo-600' : 'text-slate-500 hover:text-slate-700'}`}>Strategic Analysis</button>
-         <button onClick={() => setActiveDeepDiveTab('citations')} className={`pb-2 px-1 text-sm font-medium ${activeDeepDiveTab === 'citations' ? 'text-indigo-600 border-b-2 border-indigo-600' : 'text-slate-500 hover:text-slate-700'}`}>Key Citations</button>
+         <button onClick={() => setActiveDeepDiveTab('mindmap')} className={`pb-2 px-1 text-sm font-medium ${activeDeepDiveTab === 'mindmap' ? 'text-indigo-600 border-b-2 border-indigo-600' : 'text-slate-500 hover:text-slate-700'}`}>Carte mentale</button>
+         <button onClick={() => setActiveDeepDiveTab('strategy')} className={`pb-2 px-1 text-sm font-medium ${activeDeepDiveTab === 'strategy' ? 'text-indigo-600 border-b-2 border-indigo-600' : 'text-slate-500 hover:text-slate-700'}`}>Analyse stratégique</button>
+         <button onClick={() => setActiveDeepDiveTab('citations')} className={`pb-2 px-1 text-sm font-medium ${activeDeepDiveTab === 'citations' ? 'text-indigo-600 border-b-2 border-indigo-600' : 'text-slate-500 hover:text-slate-700'}`}>Citations clés</button>
        </div>
 
        <div className="flex-1 overflow-y-auto">
          {isDeepDiveLoading ? (
             <div className="flex flex-col items-center justify-center h-full text-slate-500">
                <Loader2 className="w-10 h-10 animate-spin text-indigo-600 mb-2" />
-               <p>Performing deep analysis...</p>
+               <p>Analyse approfondie en cours...</p>
             </div>
          ) : (
             <>
                {activeDeepDiveTab === 'mindmap' && mindMap && (
                  <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm min-h-[300px]">
-                    <h4 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2"><Layers size={20} className="text-indigo-600"/> Document Structure</h4>
+                    <h4 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2"><Layers size={20} className="text-indigo-600"/> Structure du document</h4>
                     {renderMindMapNode(mindMap)}
                  </div>
                )}
@@ -841,7 +848,7 @@ const Workspace: React.FC<WorkspaceProps> = ({ document: doc, onBack, onDelete, 
                        <Quote className="text-indigo-300 mb-2" size={24} />
                        <p className="text-lg font-medium text-indigo-900 italic mb-3">"{cit.text}"</p>
                        <div className="flex justify-between items-center text-sm">
-                         <span className="font-bold text-indigo-700">{cit.author || "Source Text"}</span>
+                         <span className="font-bold text-indigo-700">{cit.author || "Source"}</span>
                          <span className="text-indigo-500">{cit.context}</span>
                        </div>
                      </div>
@@ -858,15 +865,15 @@ const Workspace: React.FC<WorkspaceProps> = ({ document: doc, onBack, onDelete, 
     <div className="h-full flex flex-col p-6 overflow-hidden">
        <div className="flex justify-between items-center border-b border-slate-200 mb-4 pb-1">
          <div className="flex gap-4">
-            <button onClick={() => setActiveResourceTab('guide')} className={`pb-2 px-1 text-sm font-medium ${activeResourceTab === 'guide' ? 'text-indigo-600 border-b-2 border-indigo-600' : 'text-slate-500 hover:text-slate-700'}`}>Study Guide</button>
+            <button onClick={() => setActiveResourceTab('guide')} className={`pb-2 px-1 text-sm font-medium ${activeResourceTab === 'guide' ? 'text-indigo-600 border-b-2 border-indigo-600' : 'text-slate-500 hover:text-slate-700'}`}>Guide d'étude</button>
             <button onClick={() => setActiveResourceTab('faq')} className={`pb-2 px-1 text-sm font-medium ${activeResourceTab === 'faq' ? 'text-indigo-600 border-b-2 border-indigo-600' : 'text-slate-500 hover:text-slate-700'}`}>FAQ</button>
-            <button onClick={() => setActiveResourceTab('methodology')} className={`pb-2 px-1 text-sm font-medium ${activeResourceTab === 'methodology' ? 'text-indigo-600 border-b-2 border-indigo-600' : 'text-slate-500 hover:text-slate-700'}`}>Methodology</button>
+            <button onClick={() => setActiveResourceTab('methodology')} className={`pb-2 px-1 text-sm font-medium ${activeResourceTab === 'methodology' ? 'text-indigo-600 border-b-2 border-indigo-600' : 'text-slate-500 hover:text-slate-700'}`}>Méthodologie</button>
          </div>
          {(activeResourceTab === 'guide' || activeResourceTab === 'faq') && (
             <button 
               onClick={handleDownloadResources} 
               className="p-1.5 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg"
-              title="Download Content"
+              title="Télécharger"
             >
               <Download size={16} />
             </button>
@@ -877,7 +884,7 @@ const Workspace: React.FC<WorkspaceProps> = ({ document: doc, onBack, onDelete, 
          {isResourcesLoading ? (
             <div className="flex flex-col items-center justify-center h-full text-slate-500">
                <Loader2 className="w-10 h-10 animate-spin text-indigo-600 mb-2" />
-               <p>Compiling resources...</p>
+               <p>Compilation des ressources...</p>
             </div>
          ) : (
             <>
@@ -905,17 +912,17 @@ const Workspace: React.FC<WorkspaceProps> = ({ document: doc, onBack, onDelete, 
                     <h4>1. Compréhension Globale (Survol)</h4>
                     <ul>
                       <li>Commencez par lire le <strong>Résumé (Simple)</strong> pour saisir l'idée générale.</li>
-                      <li>Consultez la <strong>Mindmap</strong> dans l'onglet "Deep Dive" pour visualiser la structure.</li>
+                      <li>Consultez la <strong>Carte mentale</strong> dans l'onglet "Analyse" pour visualiser la structure.</li>
                     </ul>
                     <h4>2. Analyse Active</h4>
                     <ul>
-                      <li>Lisez le document section par section. Utilisez l'outil <strong>Surligner & Expliquer</strong> (clic droit) pour les termes complexes.</li>
-                      <li>Posez des questions au <strong>Chat Assistant</strong> pour clarifier les zones d'ombre.</li>
+                      <li>Lisez le document section par section. Utilisez l'outil <strong>Expliquer</strong> (clic droit) pour les termes complexes.</li>
+                      <li>Posez des questions au <strong>Chat</strong> pour clarifier les zones d'ombre.</li>
                     </ul>
                     <h4>3. Mémorisation</h4>
                     <ul>
                       <li>Utilisez les <strong>Flashcards</strong>. Activez le mode Lecture Audio (TTS) pour stimuler la mémoire auditive.</li>
-                      <li>Faites des sessions courtes (Promodoro) de 25 minutes.</li>
+                      <li>Faites des sessions courtes (Mode Focus) de 25 minutes.</li>
                     </ul>
                     <h4>4. Validation</h4>
                     <ul>
@@ -947,7 +954,7 @@ const Workspace: React.FC<WorkspaceProps> = ({ document: doc, onBack, onDelete, 
             className="w-full text-left flex items-center gap-2 px-3 py-2 text-sm text-slate-700 hover:bg-indigo-50 hover:text-indigo-600 rounded-md cursor-pointer transition-colors"
           >
             <Lightbulb size={16} />
-            Explain "{contextMenu.text.length > 15 ? contextMenu.text.substring(0, 15) + '...' : contextMenu.text}"
+            Expliquer "{contextMenu.text.length > 15 ? contextMenu.text.substring(0, 15) + '...' : contextMenu.text}"
           </button>
           <button 
             onClick={() => {
@@ -957,7 +964,7 @@ const Workspace: React.FC<WorkspaceProps> = ({ document: doc, onBack, onDelete, 
             className="w-full text-left flex items-center gap-2 px-3 py-2 text-sm text-slate-700 hover:bg-indigo-50 hover:text-indigo-600 rounded-md cursor-pointer transition-colors"
           >
             <Speaker size={16} />
-            Read Aloud
+            Lire à voix haute
           </button>
         </div>
       )}
@@ -970,28 +977,34 @@ const Workspace: React.FC<WorkspaceProps> = ({ document: doc, onBack, onDelete, 
            className="fixed top-20 right-4 z-40 bg-white rounded-xl shadow-xl border border-slate-200 p-4 w-64"
         >
            <div className="flex justify-between items-center mb-3">
-             <h4 className="font-bold text-slate-800 flex items-center gap-2"><Timer size={18} className="text-indigo-600"/> Focus Mode</h4>
+             <h4 className="font-bold text-slate-800 flex items-center gap-2"><Timer size={18} className="text-indigo-600"/> Mode Concentration</h4>
              <button onClick={() => setShowFocusTimer(false)} className="text-slate-400 hover:text-slate-600"><X size={16}/></button>
            </div>
            
-           <div className="flex justify-center mb-4">
-              <div className={`text-4xl font-mono font-bold tracking-wider ${focusState.mode === 'focus' ? 'text-indigo-600' : 'text-green-600'}`}>
-                {formatTime(focusState.time)}
-              </div>
-           </div>
+           {timerMessage ? (
+             <div className="mb-4 p-3 bg-indigo-50 text-indigo-700 text-sm text-center rounded-lg font-medium animate-pulse">
+               {timerMessage}
+             </div>
+           ) : (
+             <div className="flex justify-center mb-4">
+                <div className={`text-4xl font-mono font-bold tracking-wider ${focusState.mode === 'focus' ? 'text-indigo-600' : 'text-green-600'}`}>
+                  {formatTime(focusState.time)}
+                </div>
+             </div>
+           )}
 
            <div className="flex gap-2 mb-4">
              <button 
                 onClick={() => setFocusMode('focus')}
                 className={`flex-1 text-xs py-1 rounded font-medium ${focusState.mode === 'focus' ? 'bg-indigo-100 text-indigo-700' : 'text-slate-500 hover:bg-slate-100'}`}
              >
-               Focus
+               Travail
              </button>
              <button 
                 onClick={() => setFocusMode('break')}
                 className={`flex-1 text-xs py-1 rounded font-medium ${focusState.mode === 'break' ? 'bg-green-100 text-green-700' : 'text-slate-500 hover:bg-slate-100'}`}
              >
-               Break
+               Pause
              </button>
            </div>
 
@@ -1001,12 +1014,12 @@ const Workspace: React.FC<WorkspaceProps> = ({ document: doc, onBack, onDelete, 
                className={`flex-1 py-2 rounded-lg text-white font-medium flex items-center justify-center gap-2 ${focusState.isRunning ? 'bg-yellow-500 hover:bg-yellow-600' : 'bg-indigo-600 hover:bg-indigo-700'}`}
              >
                {focusState.isRunning ? <Pause size={16}/> : <Play size={16}/>}
-               {focusState.isRunning ? 'Pause' : 'Start'}
+               {focusState.isRunning ? 'Pause' : 'Début'}
              </button>
              <button 
                onClick={resetFocusTimer}
                className="p-2 text-slate-500 hover:bg-slate-100 rounded-lg"
-               title="Reset"
+               title="Réinitialiser"
              >
                <RefreshCw size={18} />
              </button>
@@ -1024,7 +1037,7 @@ const Workspace: React.FC<WorkspaceProps> = ({ document: doc, onBack, onDelete, 
           >
             <div className="p-4 border-b flex justify-between items-center sticky top-0 bg-white">
               <h3 className="font-bold text-lg text-indigo-900 flex items-center gap-2">
-                <Lightbulb size={20} /> Concept: {explainerOverlay.term}
+                <Lightbulb size={20} /> Concept : {explainerOverlay.term}
               </h3>
               <button onClick={() => setExplainerOverlay({show: false, term: '', text: null})} className="p-1 hover:bg-slate-100 rounded-full"><X size={20}/></button>
             </div>
@@ -1032,7 +1045,7 @@ const Workspace: React.FC<WorkspaceProps> = ({ document: doc, onBack, onDelete, 
                {!explainerOverlay.text ? (
                  <div className="flex flex-col items-center py-8 text-slate-500">
                    <Loader2 className="animate-spin w-8 h-8 mb-2 text-indigo-600"/>
-                   <p>Consulting AI...</p>
+                   <p>Consultation de l'IA...</p>
                  </div>
                ) : (
                  <div className="prose prose-sm prose-indigo"><ReactMarkdown>{explainerOverlay.text}</ReactMarkdown></div>
@@ -1057,7 +1070,7 @@ const Workspace: React.FC<WorkspaceProps> = ({ document: doc, onBack, onDelete, 
       <div className="hidden md:flex flex-col w-1/2 h-full border-r border-slate-200 bg-slate-100 pt-16 md:pt-0">
          <div className="h-14 border-b bg-white flex items-center px-4 justify-between z-20 shadow-sm relative">
             <button onClick={onBack} className="flex items-center text-slate-600 hover:text-slate-900 text-sm font-medium">
-              <ArrowLeft size={16} className="mr-2" /> Back
+              <ArrowLeft size={16} className="mr-2" /> Retour
             </button>
             <div className="flex items-center gap-1 bg-slate-100 rounded-lg p-1">
                <button onClick={() => setScale(s => Math.max(0.5, s - 0.1))} className="p-1.5 rounded-md hover:bg-white text-slate-600"><ZoomOut size={16} /></button>
@@ -1069,7 +1082,7 @@ const Workspace: React.FC<WorkspaceProps> = ({ document: doc, onBack, onDelete, 
                 <button 
                    onClick={handleReadCurrentPage}
                    className={`p-1.5 rounded-lg transition-colors ${isReading ? 'bg-red-50 text-red-600 animate-pulse' : 'hover:bg-slate-100 text-slate-500'}`}
-                   title={isReading ? "Stop Reading" : "Read Page Aloud"}
+                   title={isReading ? "Arrêter" : "Lire la page"}
                 >
                   {isReading ? <StopCircle size={18} /> : <Volume2 size={18} />}
                 </button>
@@ -1079,7 +1092,7 @@ const Workspace: React.FC<WorkspaceProps> = ({ document: doc, onBack, onDelete, 
                 <span className="text-sm font-medium text-slate-600 w-16 text-center">{pageNumber} / {numPages || '-'}</span>
                 <button onClick={nextPage} disabled={pageNumber >= numPages} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500 disabled:opacity-30"><ChevronRight size={18} /></button>
                 <div className="h-4 w-px bg-slate-300 mx-1"></div>
-                <button onClick={onDelete} className="p-1.5 rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-600" title="Delete Document">
+                <button onClick={onDelete} className="p-1.5 rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-600" title="Supprimer">
                   <Trash2 size={18} />
                 </button>
             </div>
@@ -1110,19 +1123,19 @@ const Workspace: React.FC<WorkspaceProps> = ({ document: doc, onBack, onDelete, 
                 <Brain size={18} /> Chat
              </button>
              <button onClick={() => setActiveTab('summary')} className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${activeTab === 'summary' ? 'bg-indigo-50 text-indigo-600' : 'text-slate-500 hover:text-slate-700'}`}>
-                <FileText size={18} /> Summary
+                <FileText size={18} /> Résumé
              </button>
              <button onClick={() => setActiveTab('flashcards')} className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${activeTab === 'flashcards' ? 'bg-indigo-50 text-indigo-600' : 'text-slate-500 hover:text-slate-700'}`}>
-                <BookOpen size={18} /> Cards
+                <BookOpen size={18} /> Cartes
              </button>
              <button onClick={() => setActiveTab('quiz')} className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${activeTab === 'quiz' ? 'bg-indigo-50 text-indigo-600' : 'text-slate-500 hover:text-slate-700'}`}>
                 <CheckCircle size={18} /> Quiz
              </button>
              <button onClick={() => setActiveTab('deep_dive')} className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${activeTab === 'deep_dive' ? 'bg-indigo-50 text-indigo-600' : 'text-slate-500 hover:text-slate-700'}`}>
-                <Target size={18} /> Deep Dive
+                <Target size={18} /> Analyse
              </button>
              <button onClick={() => setActiveTab('resources')} className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${activeTab === 'resources' ? 'bg-indigo-50 text-indigo-600' : 'text-slate-500 hover:text-slate-700'}`}>
-                <GraduationCap size={18} /> Resources
+                <GraduationCap size={18} /> Ressources
              </button>
            </div>
            
@@ -1130,7 +1143,7 @@ const Workspace: React.FC<WorkspaceProps> = ({ document: doc, onBack, onDelete, 
            <button 
              onClick={() => setShowFocusTimer(!showFocusTimer)}
              className={`p-2 rounded-lg transition-colors mr-2 ${showFocusTimer ? 'bg-indigo-100 text-indigo-600' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-50'}`}
-             title="Focus Mode (Pomodoro)"
+             title="Mode Concentration"
            >
              <Timer size={20} />
            </button>

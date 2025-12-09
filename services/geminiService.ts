@@ -1,8 +1,8 @@
-import { GoogleGenAI, Type, Schema } from "@google/genai";
+import { GoogleGenAI, Type } from "@google/genai";
 import { Document, Flashcard, QuizQuestion, MindMapNode, Citation } from '../types';
 
-// Initialize Gemini Client
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+// Helper to get Gemini Client lazily
+const getAi = () => new GoogleGenAI({ apiKey: process.env.API_KEY });
 
 // Helper to construct the file part
 const getFilePart = (base64Data: string, mimeType: string = 'application/pdf') => {
@@ -41,7 +41,7 @@ export const generateTailoredSummary = async (doc: Document, type: string, lang:
   }
 
   try {
-    const response = await ai.models.generateContent({
+    const response = await getAi().models.generateContent({
       model: 'gemini-2.5-flash',
       contents: {
         parts: [
@@ -51,7 +51,7 @@ export const generateTailoredSummary = async (doc: Document, type: string, lang:
       },
       config: { temperature: 0.3 }
     });
-    return response.text || "Failed to generate summary.";
+    return response.text || "Échec de la génération du résumé.";
   } catch (error) {
     console.error("Summary Error:", error);
     throw error;
@@ -60,7 +60,7 @@ export const generateTailoredSummary = async (doc: Document, type: string, lang:
 
 export const generateMindMap = async (doc: Document): Promise<MindMapNode> => {
   try {
-    const response = await ai.models.generateContent({
+    const response = await getAi().models.generateContent({
       model: 'gemini-2.5-flash',
       contents: {
         parts: [
@@ -97,7 +97,7 @@ export const generateMindMap = async (doc: Document): Promise<MindMapNode> => {
 
 export const generateStrategicAnalysis = async (doc: Document): Promise<string> => {
   try {
-    const response = await ai.models.generateContent({
+    const response = await getAi().models.generateContent({
       model: 'gemini-3-pro-preview', // Using Pro for deeper reasoning
       contents: {
         parts: [
@@ -106,7 +106,7 @@ export const generateStrategicAnalysis = async (doc: Document): Promise<string> 
         ]
       }
     });
-    return response.text || "Failed to generate analysis.";
+    return response.text || "Échec de l'analyse.";
   } catch (error) {
     console.error("Strategy Error:", error);
     throw error;
@@ -115,7 +115,7 @@ export const generateStrategicAnalysis = async (doc: Document): Promise<string> 
 
 export const generateKeyCitations = async (doc: Document): Promise<Citation[]> => {
   try {
-    const response = await ai.models.generateContent({
+    const response = await getAi().models.generateContent({
       model: 'gemini-2.5-flash',
       contents: {
         parts: [
@@ -149,7 +149,7 @@ export const generateKeyCitations = async (doc: Document): Promise<Citation[]> =
 
 export const generateStudyGuide = async (doc: Document): Promise<string> => {
   try {
-    const response = await ai.models.generateContent({
+    const response = await getAi().models.generateContent({
       model: 'gemini-3-pro-preview',
       contents: {
         parts: [
@@ -158,7 +158,7 @@ export const generateStudyGuide = async (doc: Document): Promise<string> => {
         ]
       }
     });
-    return response.text || "Failed to generate guide.";
+    return response.text || "Échec de la génération du guide.";
   } catch (error) {
     console.error("Study Guide Error:", error);
     throw error;
@@ -167,7 +167,7 @@ export const generateStudyGuide = async (doc: Document): Promise<string> => {
 
 export const generateFAQ = async (doc: Document): Promise<{question:string, answer:string}[]> => {
   try {
-    const response = await ai.models.generateContent({
+    const response = await getAi().models.generateContent({
       model: 'gemini-2.5-flash',
       contents: {
         parts: [
@@ -200,7 +200,7 @@ export const generateFAQ = async (doc: Document): Promise<{question:string, answ
 
 export const chatWithDocument = async (doc: Document, history: { role: string, parts: { text: string }[] }[], newMessage: string) => {
   try {
-    const chat = ai.chats.create({
+    const chat = getAi().chats.create({
       model: 'gemini-2.5-flash',
       history: [
         {
@@ -219,7 +219,7 @@ export const chatWithDocument = async (doc: Document, history: { role: string, p
     });
 
     const response = await chat.sendMessage({ message: newMessage + " (Remember to suggest 3 follow up questions at the very end labelled 'SUGGESTED_QUESTIONS: [...]')" });
-    return response.text || "I couldn't generate a response.";
+    return response.text || "Je n'ai pas pu générer de réponse.";
   } catch (error) {
     console.error("Chat Error:", error);
     throw error;
@@ -228,7 +228,7 @@ export const chatWithDocument = async (doc: Document, history: { role: string, p
 
 export const generateFlashcards = async (doc: Document, count: number = 10): Promise<Flashcard[]> => {
   try {
-    const response = await ai.models.generateContent({
+    const response = await getAi().models.generateContent({
       model: 'gemini-2.5-flash',
       contents: {
         parts: [
@@ -269,7 +269,7 @@ export const generateQuiz = async (doc: Document, count: number, topic?: string)
   try {
     const topicPrompt = topic ? `Focus specifically on the topic/chapter: "${topic}".` : "Cover the entire document.";
     
-    const response = await ai.models.generateContent({
+    const response = await getAi().models.generateContent({
       model: 'gemini-2.5-flash',
       contents: {
         parts: [
@@ -315,7 +315,7 @@ export const generateQuiz = async (doc: Document, count: number, topic?: string)
 
 export const explainConcept = async (doc: Document, concept: string): Promise<string> => {
   try {
-    const response = await ai.models.generateContent({
+    const response = await getAi().models.generateContent({
       model: 'gemini-2.5-flash',
       contents: {
         parts: [
@@ -324,7 +324,7 @@ export const explainConcept = async (doc: Document, concept: string): Promise<st
         ]
       }
     });
-    return response.text || "Could not generate explanation.";
+    return response.text || "Impossible de générer une explication.";
   } catch (error) {
     console.error("Explainer Error:", error);
     throw error;
