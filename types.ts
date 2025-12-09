@@ -15,6 +15,13 @@ export interface Citation {
   context: string;
 }
 
+export interface ExplainedConcept {
+  id: string;
+  term: string;
+  explanation: string;
+  timestamp: number;
+}
+
 export interface Document {
   id: string;
   name: string;
@@ -36,6 +43,9 @@ export interface Document {
   keyCitations?: Citation[];
   studyGuide?: string; // Markdown
   faq?: { question: string; answer: string }[];
+  
+  // History of explained terms
+  conceptHistory?: ExplainedConcept[];
 }
 
 export interface ChatMessage {

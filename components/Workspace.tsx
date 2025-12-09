@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Document, ChatMessage, Flashcard, QuizQuestion, MindMapNode, Citation } from '../types';
+import { Document, ChatMessage, Flashcard, QuizQuestion, MindMapNode, Citation, ExplainedConcept } from '../types';
 import { chatWithDocument, generateTailoredSummary, generateFlashcards, generateQuiz, explainConcept, generateMindMap, generateStrategicAnalysis, generateKeyCitations, generateStudyGuide, generateFAQ } from '../services/geminiService';
-import { Send, BookOpen, Brain, List, FileText, CheckCircle, RefreshCw, Star, ArrowRight, ArrowLeft, Loader2, Play, Lightbulb, Search, X, ZoomIn, ZoomOut, RotateCw, ChevronLeft, ChevronRight, Speaker, Shuffle, Settings, Target, Share2, Layers, Book, HelpCircle, GraduationCap, Quote, Volume2, StopCircle, Download, Timer, Pause, Bell, Trash2 } from 'lucide-react';
+import { Send, BookOpen, Brain, List, FileText, CheckCircle, RefreshCw, Star, ArrowRight, ArrowLeft, Loader2, Play, Lightbulb, Search, X, ZoomIn, ZoomOut, RotateCw, ChevronLeft, ChevronRight, Speaker, Shuffle, Settings, Target, Share2, Layers, Book, HelpCircle, GraduationCap, Quote, Volume2, StopCircle, Download, Timer, Pause, Bell, Trash2, Bookmark } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Document as PdfDocument, Page as PdfPage, pdfjs } from 'react-pdf';
@@ -17,10 +17,11 @@ interface WorkspaceProps {
   onUpdateDocument: (doc: Document) => void;
 }
 
-type ToolTab = 'chat' | 'summary' | 'flashcards' | 'quiz' | 'deep_dive' | 'resources';
+type ToolTab = 'chat' | 'summary' | 'flashcards' | 'quiz' | 'deep_dive' | 'resources' | 'concepts';
 
 const Workspace: React.FC<WorkspaceProps> = ({ document: doc, onBack, onDelete, onUpdateStats, onUpdateDocument }) => {
   const [activeTab, setActiveTab] = useState<ToolTab>('chat');
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   
   // Chat State
   const [messages, setMessages] = useState<ChatMessage[]>(doc.chatHistory || []);
@@ -63,9 +64,10 @@ const Workspace: React.FC<WorkspaceProps> = ({ document: doc, onBack, onDelete, 
   const [isResourcesLoading, setIsResourcesLoading] = useState(false);
   const [activeResourceTab, setActiveResourceTab] = useState<'guide'|'faq'|'methodology'>('guide');
 
-  // Explainer Overlay State
+  // Explainer & Concepts State
   const [explainerOverlay, setExplainerOverlay] = useState<{ show: boolean, term: string, text: string | null }>({ show: false, term: '', text: null });
-  
+  const [conceptHistory, setConceptHistory] = useState<ExplainedConcept[]>(doc.conceptHistory || []);
+
   // PDF State
   const [numPages, setNumPages] = useState<number>(0);
   const [pageNumber, setPageNumber] = useState<number>(1);
@@ -214,7 +216,7 @@ const Workspace: React.FC<WorkspaceProps> = ({ document: doc, onBack, onDelete, 
     } else {
       return;
     }
-    downloadContent(content, `${doc.name}_activeResourceTab}.md`, 'text/markdown');
+    downloadContent(content, `${doc.name}_${activeResourceTab}.md`, 'text/markdown');
   };
 
   const handleSendMessage = async (text?: string) => {
@@ -382,14 +384,42 @@ const Workspace: React.FC<WorkspaceProps> = ({ document: doc, onBack, onDelete, 
 
   const handleExplainConcept = async (text: string) => {
     if (!text.trim()) return;
+
+    // Check if we already have this concept explained in history
+    const existing = conceptHistory.find(c => c.term.toLowerCase() === text.toLowerCase());
+    if (existing) {
+        setExplainerOverlay({ show: true, term: existing.term, text: existing.explanation });
+        return;
+    }
+
     setExplainerOverlay({ show: true, term: text, text: null });
     
     try {
       const result = await explainConcept(doc, text);
       setExplainerOverlay({ show: true, term: text, text: result });
+
+      // Save to History
+      const newConcept: ExplainedConcept = {
+          id: Date.now().toString(),
+          term: text,
+          explanation: result,
+          timestamp: Date.now()
+      };
+      
+      const updatedHistory = [newConcept, ...conceptHistory];
+      setConceptHistory(updatedHistory);
+      onUpdateDocument({ ...doc, conceptHistory: updatedHistory });
+
     } catch (e) {
       setExplainerOverlay({ show: true, term: text, text: "Échec de l'explication." });
     }
+  };
+
+  const handleDeleteConcept = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const updatedHistory = conceptHistory.filter(c => c.id !== id);
+    setConceptHistory(updatedHistory);
+    onUpdateDocument({ ...doc, conceptHistory: updatedHistory });
   };
 
   const loadDeepDive = async () => {
@@ -814,6 +844,59 @@ const Workspace: React.FC<WorkspaceProps> = ({ document: doc, onBack, onDelete, 
     </div>
   );
 
+  const renderConcepts = () => (
+    <div className="h-full flex flex-col p-6 overflow-hidden">
+      <h3 className="text-xl font-bold text-slate-800 mb-4 flex items-center gap-2">
+        <Lightbulb className="text-indigo-600" /> Glossaire des Concepts
+      </h3>
+      <p className="text-sm text-slate-500 mb-6">
+        Retrouvez ici l'historique de tous les termes que vous avez demandé à l'IA d'expliquer. 
+        Pour ajouter un concept, sélectionnez un mot dans le PDF et choisissez "Expliquer" dans le menu contextuel.
+      </p>
+
+      {conceptHistory.length === 0 ? (
+        <div className="flex flex-col items-center justify-center flex-1 text-slate-500 border-2 border-dashed border-slate-200 rounded-xl m-4">
+           <Lightbulb size={32} className="mb-2 opacity-50" />
+           <p className="text-center px-6">Aucun concept expliqué pour le moment.<br/>Sélectionnez du texte dans le PDF pour commencer.</p>
+        </div>
+      ) : (
+        <div className="flex-1 overflow-y-auto space-y-3">
+          {conceptHistory.map((concept) => (
+             <motion.div 
+               key={concept.id}
+               initial={{opacity: 0, y: 10}}
+               animate={{opacity: 1, y: 0}}
+               className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm hover:border-indigo-300 transition-colors cursor-pointer group"
+               onClick={() => setExplainerOverlay({ show: true, term: concept.term, text: concept.explanation })}
+             >
+                <div className="flex justify-between items-start mb-1">
+                   <h4 className="font-bold text-indigo-900 text-lg">{concept.term}</h4>
+                   <button 
+                     onClick={(e) => handleDeleteConcept(concept.id, e)}
+                     className="p-1 text-slate-400 hover:text-red-500 rounded-full hover:bg-red-50 opacity-0 group-hover:opacity-100 transition-opacity"
+                     title="Supprimer"
+                   >
+                     <X size={16} />
+                   </button>
+                </div>
+                <p className="text-sm text-slate-600 line-clamp-2">
+                   {concept.explanation.replace(/[#*]/g, '')}
+                </p>
+                <div className="flex justify-between items-center mt-3">
+                   <span className="text-xs text-slate-400">
+                     {new Date(concept.timestamp).toLocaleDateString()} {new Date(concept.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                   </span>
+                   <span className="text-xs font-medium text-indigo-600 group-hover:underline">
+                     Voir l'explication complète
+                   </span>
+                </div>
+             </motion.div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+
   const renderDeepDive = () => (
     <div className="h-full flex flex-col p-6 overflow-hidden">
        <div className="flex gap-4 border-b border-slate-200 mb-4 pb-1">
@@ -939,6 +1022,44 @@ const Workspace: React.FC<WorkspaceProps> = ({ document: doc, onBack, onDelete, 
 
   return (
     <div className="flex h-screen bg-slate-50 relative">
+      {/* Delete Confirmation Modal */}
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="bg-white rounded-2xl shadow-2xl max-w-sm w-full p-6 border border-slate-200"
+          >
+            <div className="flex flex-col items-center text-center">
+              <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center mb-4 text-red-600">
+                <Trash2 size={24} />
+              </div>
+              <h3 className="text-xl font-bold text-slate-900 mb-2">Supprimer le document ?</h3>
+              <p className="text-slate-500 mb-6 text-sm">
+                Cette action est irréversible. Le document <span className="font-semibold">"{doc.name}"</span> ainsi que tout l'historique de chat et les notes associées seront définitivement effacés.
+              </p>
+              <div className="flex gap-3 w-full">
+                <button 
+                  onClick={() => setShowDeleteConfirm(false)}
+                  className="flex-1 px-4 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 font-medium transition-colors"
+                >
+                  Annuler
+                </button>
+                <button 
+                  onClick={() => {
+                    onDelete();
+                    setShowDeleteConfirm(false);
+                  }}
+                  className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 font-medium transition-colors"
+                >
+                  Supprimer
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        </div>
+      )}
+
       {/* Context Menu Overlay */}
       {contextMenu.show && (
         <div 
@@ -1061,7 +1182,7 @@ const Workspace: React.FC<WorkspaceProps> = ({ document: doc, onBack, onDelete, 
             <button onClick={onBack} className="p-2 mr-2"><ArrowLeft size={20}/></button>
             <span className="font-semibold truncate max-w-[150px]">{doc.name}</span>
          </div>
-         <button onClick={onDelete} className="p-2 text-slate-400 hover:text-red-600 rounded-full hover:bg-red-50">
+         <button onClick={() => setShowDeleteConfirm(true)} className="p-2 text-slate-400 hover:text-red-600 rounded-full hover:bg-red-50">
            <Trash2 size={20} />
          </button>
       </div>
@@ -1092,7 +1213,7 @@ const Workspace: React.FC<WorkspaceProps> = ({ document: doc, onBack, onDelete, 
                 <span className="text-sm font-medium text-slate-600 w-16 text-center">{pageNumber} / {numPages || '-'}</span>
                 <button onClick={nextPage} disabled={pageNumber >= numPages} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500 disabled:opacity-30"><ChevronRight size={18} /></button>
                 <div className="h-4 w-px bg-slate-300 mx-1"></div>
-                <button onClick={onDelete} className="p-1.5 rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-600" title="Supprimer">
+                <button onClick={() => setShowDeleteConfirm(true)} className="p-1.5 rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-600" title="Supprimer">
                   <Trash2 size={18} />
                 </button>
             </div>
@@ -1134,6 +1255,9 @@ const Workspace: React.FC<WorkspaceProps> = ({ document: doc, onBack, onDelete, 
              <button onClick={() => setActiveTab('deep_dive')} className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${activeTab === 'deep_dive' ? 'bg-indigo-50 text-indigo-600' : 'text-slate-500 hover:text-slate-700'}`}>
                 <Target size={18} /> Analyse
              </button>
+             <button onClick={() => setActiveTab('concepts')} className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${activeTab === 'concepts' ? 'bg-indigo-50 text-indigo-600' : 'text-slate-500 hover:text-slate-700'}`}>
+                <Lightbulb size={18} /> Concepts
+             </button>
              <button onClick={() => setActiveTab('resources')} className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${activeTab === 'resources' ? 'bg-indigo-50 text-indigo-600' : 'text-slate-500 hover:text-slate-700'}`}>
                 <GraduationCap size={18} /> Ressources
              </button>
@@ -1165,6 +1289,7 @@ const Workspace: React.FC<WorkspaceProps> = ({ document: doc, onBack, onDelete, 
                 {activeTab === 'flashcards' && renderFlashcards()}
                 {activeTab === 'quiz' && renderQuiz()}
                 {activeTab === 'deep_dive' && renderDeepDive()}
+                {activeTab === 'concepts' && renderConcepts()}
                 {activeTab === 'resources' && renderResources()}
              </motion.div>
            </AnimatePresence>

@@ -3,7 +3,7 @@ import { User, Document, AppView, AnalyticsData } from './types';
 import Workspace from './components/Workspace';
 import { getAllDocuments, saveDocument, deleteDocument, clearAllData, loadDocumentFile } from './services/storageService';
 import { supabase } from './services/supabaseClient';
-import { LayoutDashboard, FolderOpen, LogOut, UploadCloud, Plus, File as FileIcon, Trash2, BarChart2, Zap, Search, Loader2, Database, UserPlus, LogIn, AlertCircle } from 'lucide-react';
+import { LayoutDashboard, FolderOpen, LogOut, UploadCloud, Plus, File as FileIcon, Trash2, BarChart2, Zap, Search, Loader2, Database, UserPlus, LogIn, AlertCircle, Smartphone } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import { motion } from 'framer-motion';
 
@@ -159,6 +159,10 @@ const App: React.FC = () => {
     setView(AppView.AUTH);
   };
 
+  const handleDownloadApp = () => {
+    alert("Le téléchargement de l'APK Android (version Beta) démarrera bientôt !");
+  };
+
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file && user) {
@@ -223,8 +227,8 @@ const App: React.FC = () => {
 
   const handleDeleteActiveDoc = async () => {
     if (!activeDoc) return;
-    if (!confirm(`Êtes-vous sûr de vouloir supprimer "${activeDoc.name}" ?`)) return;
-
+    // Native confirm removed here, handled by Workspace modal
+    
     try {
       await deleteDocument(activeDoc.id);
       setDocuments(prev => prev.filter(d => d.id !== activeDoc!.id));
@@ -233,7 +237,7 @@ const App: React.FC = () => {
       setView(AppView.LIBRARY);
     } catch (error) {
       console.error("Failed to delete active document:", error);
-      alert("Échec de la suppression du document.");
+      alert("Failed to delete document.");
     }
   };
 
@@ -575,6 +579,10 @@ const App: React.FC = () => {
                <p className="text-xs text-slate-400 truncate">{user?.email}</p>
              </div>
           </div>
+
+          <button onClick={handleDownloadApp} className="w-full flex items-center gap-2 text-sm text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 p-2 rounded-lg transition-colors">
+             <Smartphone size={16} /> App Mobile
+          </button>
           
           <button onClick={handleClearAllData} className="w-full flex items-center gap-2 text-sm text-slate-500 hover:text-red-600 hover:bg-red-50 p-2 rounded-lg transition-colors">
              <Database size={16} /> Vider le cloud
