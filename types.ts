@@ -86,7 +86,8 @@ export enum AppView {
   AUTH = 'AUTH',
   DASHBOARD = 'DASHBOARD',
   LIBRARY = 'LIBRARY',
-  WORKSPACE = 'WORKSPACE'
+  WORKSPACE = 'WORKSPACE',
+  SUBSCRIPTION = 'SUBSCRIPTION'
 }
 
 export interface AnalyticsData {

@@ -3,7 +3,7 @@ import { User, Document, AppView, AnalyticsData } from './types';
 import Workspace from './components/Workspace';
 import { getAllDocuments, saveDocument, deleteDocument, clearAllData, loadDocumentFile } from './services/storageService';
 import { supabase } from './services/supabaseClient';
-import { LayoutDashboard, FolderOpen, LogOut, UploadCloud, Plus, File as FileIcon, Trash2, BarChart2, Zap, Search, Loader2, Database, UserPlus, LogIn, AlertCircle, Smartphone, Moon, Sun } from 'lucide-react';
+import { LayoutDashboard, FolderOpen, LogOut, UploadCloud, Plus, File as FileIcon, Trash2, BarChart2, Zap, Search, Loader2, Database, UserPlus, LogIn, AlertCircle, Smartphone, Moon, Sun, Crown, CheckCircle2, MessageCircle } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import { motion } from 'framer-motion';
 
@@ -14,6 +14,9 @@ const generateId = () => {
     }
     return Date.now().toString(36) + Math.random().toString(36).substring(2);
 };
+
+// CONFIGURATION WHATSAPP
+const WHATSAPP_NUMBER = "50937944651"; // REMPLACER PAR VOTRE NUMÉRO (ex: 50936000000)
 
 const App: React.FC = () => {
   const [view, setView] = useState<AppView>(AppView.AUTH);
@@ -347,6 +350,77 @@ const App: React.FC = () => {
 
   // --- Views ---
 
+  const renderSubscriptionView = () => {
+    const benefits = [
+        "Documents PDF illimités",
+        "Modèle IA avancé (Plus rapide)",
+        "Génération de Quiz & Flashcards illimités",
+        "Support technique prioritaire",
+        "Accès aux nouvelles fonctionnalités en avant-première",
+        "Analyse approfondie de documents"
+    ];
+
+    const message = encodeURIComponent(`Bonjour, je suis intéressé par l'abonnement Lumina Premium à 1000 Gourdes. Mon email est: ${user?.email}`);
+    const whatsappLink = `https://wa.me/${WHATSAPP_NUMBER}?text=${message}`;
+
+    return (
+        <div className="p-8 max-w-7xl mx-auto flex flex-col items-center justify-center min-h-[80vh]">
+            <div className="text-center mb-10">
+                <h2 className="text-3xl font-bold text-slate-800 dark:text-white mb-4">Passez au niveau supérieur 🚀</h2>
+                <p className="text-slate-500 dark:text-slate-400 max-w-xl mx-auto">
+                    Débloquez tout le potentiel de Lumina pour booster vos études et votre productivité.
+                </p>
+            </div>
+
+            <div className="bg-white dark:bg-slate-800 rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-700 overflow-hidden max-w-md w-full relative transition-colors">
+                <div className="absolute top-0 inset-x-0 h-2 bg-gradient-to-r from-yellow-400 to-orange-500"></div>
+                <div className="p-8">
+                    <div className="flex justify-between items-start mb-6">
+                        <div>
+                            <h3 className="text-2xl font-bold text-slate-900 dark:text-white">Lumina Premium</h3>
+                            <span className="inline-block mt-2 px-3 py-1 bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400 text-xs font-bold rounded-full uppercase tracking-wider">
+                                Recommandé
+                            </span>
+                        </div>
+                        <Crown className="text-yellow-500 w-10 h-10" fill="currentColor" />
+                    </div>
+
+                    <div className="mb-8">
+                        <div className="flex items-baseline gap-2">
+                            <span className="text-4xl font-extrabold text-slate-900 dark:text-white">1000 Gdes</span>
+                            <span className="text-slate-500 dark:text-slate-400 font-medium">/ mois</span>
+                        </div>
+                        <p className="text-sm text-slate-400 dark:text-slate-500 mt-2">Paiement via MonCash ou Virement</p>
+                    </div>
+
+                    <ul className="space-y-4 mb-8">
+                        {benefits.map((benefit, index) => (
+                            <li key={index} className="flex items-start gap-3">
+                                <CheckCircle2 className="w-5 h-5 text-green-500 shrink-0 mt-0.5" />
+                                <span className="text-slate-700 dark:text-slate-300 text-sm">{benefit}</span>
+                            </li>
+                        ))}
+                    </ul>
+
+                    <a 
+                        href={whatsappLink}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="w-full py-4 bg-[#25D366] hover:bg-[#20bd5a] text-white rounded-xl font-bold text-center flex items-center justify-center gap-2 transition-all hover:shadow-lg transform hover:-translate-y-0.5"
+                    >
+                        <MessageCircle size={20} fill="currentColor" className="text-white" />
+                        Contacter le vendeur (WhatsApp)
+                    </a>
+                    
+                    <p className="text-center text-xs text-slate-400 dark:text-slate-500 mt-4">
+                        Activation rapide après confirmation du paiement.
+                    </p>
+                </div>
+            </div>
+        </div>
+    );
+  };
+
   const renderAuthView = () => (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-indigo-500 to-purple-600 dark:from-indigo-900 dark:to-purple-900 p-4 transition-colors">
       <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl p-8 w-full max-w-md transition-colors">
@@ -591,6 +665,12 @@ const App: React.FC = () => {
           >
             <FolderOpen size={20} /> Mes documents
           </button>
+          <button 
+            onClick={() => setView(AppView.SUBSCRIPTION)}
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${view === AppView.SUBSCRIPTION ? 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 font-medium' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700'}`}
+          >
+            <Crown size={20} className={view === AppView.SUBSCRIPTION ? 'fill-indigo-600 dark:fill-indigo-400' : ''} /> Pass Premium
+          </button>
         </nav>
         <div className="p-6 border-t border-slate-100 dark:border-slate-700 space-y-2">
           
@@ -637,11 +717,13 @@ const App: React.FC = () => {
              </button>
              <button onClick={() => setView(AppView.DASHBOARD)} className={view === AppView.DASHBOARD ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-400'}><LayoutDashboard size={24}/></button>
              <button onClick={() => setView(AppView.LIBRARY)} className={view === AppView.LIBRARY ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-400'}><FolderOpen size={24}/></button>
+             <button onClick={() => setView(AppView.SUBSCRIPTION)} className={view === AppView.SUBSCRIPTION ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-400'}><Crown size={24}/></button>
            </div>
         </div>
 
         {view === AppView.DASHBOARD && renderDashboardView()}
         {view === AppView.LIBRARY && renderLibraryView()}
+        {view === AppView.SUBSCRIPTION && renderSubscriptionView()}
       </main>
     </div>
   );

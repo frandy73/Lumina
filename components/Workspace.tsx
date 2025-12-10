@@ -1559,11 +1559,11 @@ const Workspace: React.FC<WorkspaceProps> = ({ document: doc, onBack, onDelete, 
                     pageNumber={pageNumber} 
                     scale={scale} 
                     rotate={rotation} 
-                    className="bg-white" 
+                    className="bg-white shadow-lg dark:invert dark:hue-rotate-180 dark:brightness-95" 
                     renderTextLayer={true} 
                     renderAnnotationLayer={false}
                     loading={
-                        <div className="flex items-center justify-center h-[800px] w-full bg-white">
+                        <div className="flex items-center justify-center h-[800px] w-full bg-white dark:bg-slate-800">
                             <Loader2 className="animate-spin text-slate-400" size={32} />
                         </div>
                     }
@@ -1578,6 +1578,7 @@ const Workspace: React.FC<WorkspaceProps> = ({ document: doc, onBack, onDelete, 
                         pageNumber={pageNumber + 1} 
                         scale={scale} 
                         rotate={rotation}
+                        className="bg-white shadow-lg dark:invert dark:hue-rotate-180 dark:brightness-95"
                         renderTextLayer={true}
                         renderAnnotationLayer={false}
                     />
@@ -1592,6 +1593,7 @@ const Workspace: React.FC<WorkspaceProps> = ({ document: doc, onBack, onDelete, 
                         pageNumber={pageNumber - 1} 
                         scale={scale} 
                         rotate={rotation}
+                        className="bg-white shadow-lg dark:invert dark:hue-rotate-180 dark:brightness-95"
                         renderTextLayer={true}
                         renderAnnotationLayer={false}
                     />
