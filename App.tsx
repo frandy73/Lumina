@@ -3,7 +3,7 @@ import { User, Document, AppView, AnalyticsData } from './types';
 import Workspace from './components/Workspace';
 import { getAllDocuments, saveDocument, deleteDocument, clearAllData, loadDocumentFile } from './services/storageService';
 import { supabase } from './services/supabaseClient';
-import { LayoutDashboard, FolderOpen, LogOut, UploadCloud, Plus, File as FileIcon, Trash2, BarChart2, Zap, Search, Loader2, Database, UserPlus, LogIn, AlertCircle, Smartphone } from 'lucide-react';
+import { LayoutDashboard, FolderOpen, LogOut, UploadCloud, Plus, File as FileIcon, Trash2, BarChart2, Zap, Search, Loader2, Database, UserPlus, LogIn, AlertCircle, Smartphone, Moon, Sun } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import { motion } from 'framer-motion';
 
@@ -23,6 +23,29 @@ const App: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isOpeningDoc, setIsOpeningDoc] = useState(false);
+  
+  // Theme State
+  const [theme, setTheme] = useState<'light' | 'dark'>(() => {
+    if (typeof window !== 'undefined') {
+        return (localStorage.getItem('theme') as 'light' | 'dark') || 'light';
+    }
+    return 'light';
+  });
+
+  // Apply Theme
+  useEffect(() => {
+    const root = window.document.documentElement;
+    if (theme === 'dark') {
+      root.classList.add('dark');
+    } else {
+      root.classList.remove('dark');
+    }
+    localStorage.setItem('theme', theme);
+  }, [theme]);
+
+  const toggleTheme = () => {
+    setTheme(prev => prev === 'light' ? 'dark' : 'light');
+  };
   
   // Auth State
   const [isSignUp, setIsSignUp] = useState(false);
@@ -325,18 +348,18 @@ const App: React.FC = () => {
   // --- Views ---
 
   const renderAuthView = () => (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-indigo-500 to-purple-600 p-4">
-      <div className="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-md">
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-indigo-500 to-purple-600 dark:from-indigo-900 dark:to-purple-900 p-4 transition-colors">
+      <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl p-8 w-full max-w-md transition-colors">
         <div className="text-center mb-8">
-          <div className="w-16 h-16 bg-indigo-100 rounded-full flex items-center justify-center mx-auto mb-4">
-             <Zap className="text-indigo-600 w-8 h-8" fill="currentColor" />
+          <div className="w-16 h-16 bg-indigo-100 dark:bg-indigo-900/50 rounded-full flex items-center justify-center mx-auto mb-4">
+             <Zap className="text-indigo-600 dark:text-indigo-400 w-8 h-8" fill="currentColor" />
           </div>
-          <h1 className="text-3xl font-bold text-slate-900">Lumina</h1>
-          <p className="text-slate-500 mt-2">Assistant d'apprentissage IA</p>
+          <h1 className="text-3xl font-bold text-slate-900 dark:text-white">Lumina</h1>
+          <p className="text-slate-500 dark:text-slate-400 mt-2">Assistant d'apprentissage IA</p>
         </div>
         
         {authError && (
-            <div className={`mb-6 p-4 rounded-xl border flex items-start gap-3 text-sm ${authError.includes('Compte créé') ? 'bg-green-50 text-green-700 border-green-200' : 'bg-red-50 text-red-600 border-red-200'}`}>
+            <div className={`mb-6 p-4 rounded-xl border flex items-start gap-3 text-sm ${authError.includes('Compte créé') ? 'bg-green-50 text-green-700 border-green-200 dark:bg-green-900/20 dark:text-green-400 dark:border-green-800' : 'bg-red-50 text-red-600 border-red-200 dark:bg-red-900/20 dark:text-red-400 dark:border-red-800'}`}>
                 <AlertCircle size={20} className="shrink-0 mt-0.5" />
                 <p>{authError}</p>
             </div>
@@ -344,23 +367,23 @@ const App: React.FC = () => {
 
         <form onSubmit={handleAuth} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Email</label>
+            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Email</label>
             <input 
                 type="email" 
                 required 
-                className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none" 
+                className="w-full px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none bg-white dark:bg-slate-700 dark:text-white transition-colors" 
                 placeholder="etudiant@exemple.com" 
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Mot de passe</label>
+            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Mot de passe</label>
             <input 
                 type="password" 
                 required 
                 minLength={6}
-                className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none" 
+                className="w-full px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none bg-white dark:bg-slate-700 dark:text-white transition-colors" 
                 placeholder="••••••••" 
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
@@ -377,11 +400,11 @@ const App: React.FC = () => {
         </form>
 
         <div className="mt-6 text-center">
-             <p className="text-sm text-slate-600">
+             <p className="text-sm text-slate-600 dark:text-slate-400">
                  {isSignUp ? "Vous avez déjà un compte ?" : "Pas encore de compte ?"}
                  <button 
                     onClick={() => { setIsSignUp(!isSignUp); setAuthError(''); }}
-                    className="ml-2 text-indigo-600 font-medium hover:underline focus:outline-none"
+                    className="ml-2 text-indigo-600 dark:text-indigo-400 font-medium hover:underline focus:outline-none"
                  >
                      {isSignUp ? "Se connecter" : "S'inscrire"}
                  </button>
@@ -401,47 +424,47 @@ const App: React.FC = () => {
     return (
       <div className="p-8 max-w-7xl mx-auto">
         <header className="mb-8">
-          <h2 className="text-2xl font-bold text-slate-800">Ravi de vous revoir, {user?.name}</h2>
-          <p className="text-slate-500">Voici votre progression d'apprentissage.</p>
+          <h2 className="text-2xl font-bold text-slate-800 dark:text-white">Ravi de vous revoir, {user?.name}</h2>
+          <p className="text-slate-500 dark:text-slate-400">Voici votre progression d'apprentissage.</p>
         </header>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-           <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex items-center gap-4">
-             <div className="p-3 bg-blue-50 text-blue-600 rounded-xl"><FileIcon size={24} /></div>
-             <div><p className="text-sm text-slate-500">Documents</p><p className="text-2xl font-bold text-slate-800">{stats.totalDocs}</p></div>
+           <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 flex items-center gap-4 transition-colors">
+             <div className="p-3 bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-xl"><FileIcon size={24} /></div>
+             <div><p className="text-sm text-slate-500 dark:text-slate-400">Documents</p><p className="text-2xl font-bold text-slate-800 dark:text-white">{stats.totalDocs}</p></div>
            </div>
-           <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex items-center gap-4">
-             <div className="p-3 bg-purple-50 text-purple-600 rounded-xl"><Zap size={24} /></div>
-             <div><p className="text-sm text-slate-500">Flashcards</p><p className="text-2xl font-bold text-slate-800">{stats.totalFlashcardsGenerated}</p></div>
+           <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 flex items-center gap-4 transition-colors">
+             <div className="p-3 bg-purple-50 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400 rounded-xl"><Zap size={24} /></div>
+             <div><p className="text-sm text-slate-500 dark:text-slate-400">Flashcards</p><p className="text-2xl font-bold text-slate-800 dark:text-white">{stats.totalFlashcardsGenerated}</p></div>
            </div>
-           <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex items-center gap-4">
-             <div className="p-3 bg-green-50 text-green-600 rounded-xl"><BarChart2 size={24} /></div>
-             <div><p className="text-sm text-slate-500">Quiz terminés</p><p className="text-2xl font-bold text-slate-800">{stats.quizzesTaken}</p></div>
+           <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 flex items-center gap-4 transition-colors">
+             <div className="p-3 bg-green-50 dark:bg-green-900/30 text-green-600 dark:text-green-400 rounded-xl"><BarChart2 size={24} /></div>
+             <div><p className="text-sm text-slate-500 dark:text-slate-400">Quiz terminés</p><p className="text-2xl font-bold text-slate-800 dark:text-white">{stats.quizzesTaken}</p></div>
            </div>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-           <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 h-80">
-              <h3 className="font-semibold text-slate-800 mb-4">Aperçu de l'activité</h3>
+           <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 h-80 transition-colors">
+              <h3 className="font-semibold text-slate-800 dark:text-white mb-4">Aperçu de l'activité</h3>
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={chartData}>
                   <XAxis dataKey="name" stroke="#94a3b8" fontSize={12} tickLine={false} axisLine={false} />
                   <YAxis stroke="#94a3b8" fontSize={12} tickLine={false} axisLine={false} />
-                  <Tooltip cursor={{fill: '#f1f5f9'}} contentStyle={{borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)'}} />
+                  <Tooltip cursor={{fill: theme === 'dark' ? '#334155' : '#f1f5f9'}} contentStyle={{borderRadius: '8px', border: 'none', backgroundColor: theme === 'dark' ? '#1e293b' : '#fff', color: theme === 'dark' ? '#fff' : '#000', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)'}} />
                   <Bar dataKey="value" fill="#6366f1" radius={[4, 4, 0, 0]} barSize={40} />
                 </BarChart>
               </ResponsiveContainer>
            </div>
-           <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 h-80 overflow-y-auto">
-              <h3 className="font-semibold text-slate-800 mb-4">Activité récente</h3>
+           <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 h-80 overflow-y-auto transition-colors">
+              <h3 className="font-semibold text-slate-800 dark:text-white mb-4">Activité récente</h3>
               <div className="space-y-4">
                 {stats.recentActivity.length === 0 && <p className="text-slate-400 text-sm">Aucune activité pour le moment.</p>}
                 {stats.recentActivity.map((act, i) => (
                   <div key={i} className="flex items-center gap-3 text-sm">
                     <div className="w-2 h-2 rounded-full bg-indigo-400"></div>
-                    <span className="font-medium text-slate-700">{act.action}</span>
-                    <span className="text-slate-500">sur {act.docName}</span>
-                    <span className="text-slate-400 ml-auto text-xs">{act.time}</span>
+                    <span className="font-medium text-slate-700 dark:text-slate-300">{act.action}</span>
+                    <span className="text-slate-500 dark:text-slate-400">sur {act.docName}</span>
+                    <span className="text-slate-400 dark:text-slate-500 ml-auto text-xs">{act.time}</span>
                   </div>
                 ))}
               </div>
@@ -460,16 +483,16 @@ const App: React.FC = () => {
       <div className="p-8 max-w-7xl mx-auto relative">
         {/* Loading Overlay when opening document */}
         {isOpeningDoc && (
-          <div className="absolute inset-0 z-50 bg-white/80 flex flex-col items-center justify-center backdrop-blur-sm rounded-xl">
-             <Loader2 className="w-12 h-12 text-indigo-600 animate-spin mb-4" />
-             <p className="text-lg font-medium text-slate-700">Téléchargement de votre document...</p>
+          <div className="absolute inset-0 z-50 bg-white/80 dark:bg-slate-900/80 flex flex-col items-center justify-center backdrop-blur-sm rounded-xl">
+             <Loader2 className="w-12 h-12 text-indigo-600 dark:text-indigo-400 animate-spin mb-4" />
+             <p className="text-lg font-medium text-slate-700 dark:text-slate-300">Téléchargement de votre document...</p>
           </div>
         )}
 
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
           <div>
-            <h2 className="text-2xl font-bold text-slate-800">Vos documents</h2>
-            <p className="text-slate-500">Stockés en toute sécurité dans le cloud.</p>
+            <h2 className="text-2xl font-bold text-slate-800 dark:text-white">Vos documents</h2>
+            <p className="text-slate-500 dark:text-slate-400">Stockés en toute sécurité dans le cloud.</p>
           </div>
           <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
             <div className="relative w-full md:w-64">
@@ -479,7 +502,7 @@ const App: React.FC = () => {
                   placeholder="Rechercher..." 
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
+                  className="w-full pl-10 pr-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white dark:bg-slate-700 dark:text-white transition-colors"
                />
             </div>
             <label className={`flex items-center justify-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors cursor-pointer shadow-md whitespace-nowrap ${isLoading ? 'opacity-50 pointer-events-none' : ''}`}>
@@ -491,13 +514,13 @@ const App: React.FC = () => {
         </div>
 
         {documents.length === 0 && !isLoading ? (
-          <div className="flex flex-col items-center justify-center h-64 border-2 border-dashed border-slate-300 rounded-2xl bg-slate-50 text-slate-500">
-             <UploadCloud size={48} className="mb-4 text-slate-400" />
+          <div className="flex flex-col items-center justify-center h-64 border-2 border-dashed border-slate-300 dark:border-slate-700 rounded-2xl bg-slate-50 dark:bg-slate-800 text-slate-500 dark:text-slate-400 transition-colors">
+             <UploadCloud size={48} className="mb-4 text-slate-400 dark:text-slate-500" />
              <p className="text-lg font-medium">Aucun document</p>
              <p className="text-sm">Téléchargez un PDF pour commencer</p>
           </div>
         ) : filteredDocs.length === 0 && !isLoading ? (
-          <div className="flex flex-col items-center justify-center h-40 text-slate-500">
+          <div className="flex flex-col items-center justify-center h-40 text-slate-500 dark:text-slate-400">
              <Search size={32} className="mb-2 opacity-50" />
              <p>Aucun document trouvé pour "{searchQuery}"</p>
           </div>
@@ -510,21 +533,21 @@ const App: React.FC = () => {
                 animate={{ opacity: 1, scale: 1 }}
                 whileHover={{ y: -4 }}
                 onClick={() => openDocument(doc)}
-                className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 hover:shadow-md transition-all cursor-pointer group relative"
+                className="bg-white dark:bg-slate-800 p-5 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 hover:shadow-md transition-all cursor-pointer group relative"
               >
                 <div className="flex items-start justify-between mb-4">
-                  <div className="p-3 bg-red-50 text-red-500 rounded-xl">
+                  <div className="p-3 bg-red-50 dark:bg-red-900/20 text-red-500 dark:text-red-400 rounded-xl">
                     <FileIcon size={24} />
                   </div>
                   <button 
                     onClick={(e) => handleDeleteDoc(doc.id, e)}
-                    className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-full transition-colors opacity-0 group-hover:opacity-100"
+                    className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-full transition-colors opacity-0 group-hover:opacity-100"
                   >
                     <Trash2 size={16} />
                   </button>
                 </div>
-                <h3 className="font-semibold text-slate-800 truncate mb-1" title={doc.name}>{doc.name}</h3>
-                <p className="text-xs text-slate-500">{doc.uploadDate} • {(doc.size / 1024 / 1024).toFixed(2)} MB</p>
+                <h3 className="font-semibold text-slate-800 dark:text-white truncate mb-1" title={doc.name}>{doc.name}</h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400">{doc.uploadDate} • {(doc.size / 1024 / 1024).toFixed(2)} MB</p>
               </motion.div>
             ))}
           </div>
@@ -547,48 +570,57 @@ const App: React.FC = () => {
   }
 
   return (
-    <div className="flex h-screen bg-slate-50">
+    <div className="flex h-screen bg-slate-50 dark:bg-slate-900 transition-colors duration-200">
       {/* Sidebar */}
-      <aside className="w-64 bg-white border-r border-slate-200 hidden md:flex flex-col">
+      <aside className="w-64 bg-white dark:bg-slate-800 border-r border-slate-200 dark:border-slate-700 hidden md:flex flex-col transition-colors">
         <div className="p-6">
-          <div className="flex items-center gap-2 font-bold text-xl text-indigo-600">
+          <div className="flex items-center gap-2 font-bold text-xl text-indigo-600 dark:text-indigo-400">
             <Zap fill="currentColor" /> Lumina
           </div>
         </div>
         <nav className="flex-1 px-4 space-y-2">
           <button 
             onClick={() => setView(AppView.DASHBOARD)}
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${view === AppView.DASHBOARD ? 'bg-indigo-50 text-indigo-600 font-medium' : 'text-slate-500 hover:bg-slate-50'}`}
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${view === AppView.DASHBOARD ? 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 font-medium' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700'}`}
           >
             <LayoutDashboard size={20} /> Tableau de bord
           </button>
           <button 
             onClick={() => setView(AppView.LIBRARY)}
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${view === AppView.LIBRARY ? 'bg-indigo-50 text-indigo-600 font-medium' : 'text-slate-500 hover:bg-slate-50'}`}
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${view === AppView.LIBRARY ? 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 font-medium' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700'}`}
           >
             <FolderOpen size={20} /> Mes documents
           </button>
         </nav>
-        <div className="p-6 border-t border-slate-100 space-y-2">
-          <div className="flex items-center gap-3 mb-4">
-             <div className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-700 font-bold text-xs">
+        <div className="p-6 border-t border-slate-100 dark:border-slate-700 space-y-2">
+          
+          <button 
+            onClick={toggleTheme}
+            className="w-full flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 p-2 rounded-lg transition-colors"
+          >
+            {theme === 'light' ? <Moon size={16} /> : <Sun size={16} />}
+            {theme === 'light' ? 'Mode Sombre' : 'Mode Clair'}
+          </button>
+
+          <div className="flex items-center gap-3 mb-2 pt-2">
+             <div className="w-8 h-8 rounded-full bg-indigo-100 dark:bg-indigo-900/50 flex items-center justify-center text-indigo-700 dark:text-indigo-300 font-bold text-xs">
                {user?.name.charAt(0)}
              </div>
              <div className="overflow-hidden">
-               <p className="text-sm font-medium text-slate-800 truncate">{user?.name}</p>
+               <p className="text-sm font-medium text-slate-800 dark:text-slate-200 truncate">{user?.name}</p>
                <p className="text-xs text-slate-400 truncate">{user?.email}</p>
              </div>
           </div>
 
-          <button onClick={handleDownloadApp} className="w-full flex items-center gap-2 text-sm text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 p-2 rounded-lg transition-colors">
+          <button onClick={handleDownloadApp} className="w-full flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 p-2 rounded-lg transition-colors">
              <Smartphone size={16} /> App Mobile
           </button>
           
-          <button onClick={handleClearAllData} className="w-full flex items-center gap-2 text-sm text-slate-500 hover:text-red-600 hover:bg-red-50 p-2 rounded-lg transition-colors">
+          <button onClick={handleClearAllData} className="w-full flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 p-2 rounded-lg transition-colors">
              <Database size={16} /> Vider le cloud
           </button>
 
-          <button onClick={handleSignOut} className="w-full flex items-center gap-2 text-sm text-slate-500 hover:text-slate-800 hover:bg-slate-50 p-2 rounded-lg transition-colors">
+          <button onClick={handleSignOut} className="w-full flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 p-2 rounded-lg transition-colors">
             <LogOut size={16} /> Déconnexion
           </button>
         </div>
@@ -597,11 +629,14 @@ const App: React.FC = () => {
       {/* Main Content */}
       <main className="flex-1 overflow-auto">
         {/* Mobile Header */}
-        <div className="md:hidden h-16 bg-white border-b flex items-center justify-between px-4 sticky top-0 z-10">
-           <div className="font-bold text-lg text-indigo-600 flex items-center gap-2"><Zap fill="currentColor"/> Lumina</div>
-           <div className="flex gap-4">
-             <button onClick={() => setView(AppView.DASHBOARD)} className={view === AppView.DASHBOARD ? 'text-indigo-600' : 'text-slate-400'}><LayoutDashboard size={24}/></button>
-             <button onClick={() => setView(AppView.LIBRARY)} className={view === AppView.LIBRARY ? 'text-indigo-600' : 'text-slate-400'}><FolderOpen size={24}/></button>
+        <div className="md:hidden h-16 bg-white dark:bg-slate-800 border-b dark:border-slate-700 flex items-center justify-between px-4 sticky top-0 z-10 transition-colors">
+           <div className="font-bold text-lg text-indigo-600 dark:text-indigo-400 flex items-center gap-2"><Zap fill="currentColor"/> Lumina</div>
+           <div className="flex gap-4 items-center">
+             <button onClick={toggleTheme} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
+                {theme === 'light' ? <Moon size={20} /> : <Sun size={20} />}
+             </button>
+             <button onClick={() => setView(AppView.DASHBOARD)} className={view === AppView.DASHBOARD ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-400'}><LayoutDashboard size={24}/></button>
+             <button onClick={() => setView(AppView.LIBRARY)} className={view === AppView.LIBRARY ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-400'}><FolderOpen size={24}/></button>
            </div>
         </div>
 
